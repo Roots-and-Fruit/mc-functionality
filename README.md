@@ -1,10 +1,10 @@
 # MC Functionality
 
-[![WordPress Plugin Version](https://img.shields.io/badge/WordPress%20Plugin-1.0.0-blue.svg)](https://wordpress.org/plugins/mc-functionality/)
+[![WordPress Plugin Version](https://img.shields.io/badge/WordPress%20Plugin-1.1.0-blue.svg)](https://github.com/Roots-and-Fruit/mc-functionality)
 [![PHP Version](https://img.shields.io/badge/PHP-7.4+-green.svg)](https://php.net/)
 [![WordPress Version](https://img.shields.io/badge/WordPress-5.0+-green.svg)](https://wordpress.org/)
 [![License](https://img.shields.io/badge/License-GPL%20v2%2B-orange.svg)](https://www.gnu.org/licenses/gpl-2.0.html)
-[![Maintenance](https://img.shields.io/badge/Maintained%3F-yes-green.svg)](https://github.com/mattcromwell/mc-functionality/graphs/commit-activity)
+[![Maintenance](https://img.shields.io/badge/Maintained%3F-yes-green.svg)](https://github.com/Roots-and-Fruit/mc-functionality/graphs/commit-activity)
 
 A **file-based code snippet system** for WordPress that loads and executes PHP files with better performance and security than database-stored snippets.
 
@@ -34,7 +34,7 @@ A **file-based code snippet system** for WordPress that loads and executes PHP f
 1. **Upload** the plugin to `/wp-content/plugins/mc-functionality/`
 2. **Activate** the plugin through the WordPress admin
 3. **Access** "Site Functions" under the Plugins menu
-4. **Create** your first snippet in the `/code-snippets/` directory
+4. **Create** your first snippet. It is saved in `wp-content/mc-snippets/`
 
 ## 🛠️ Quick Start
 
@@ -61,10 +61,10 @@ add_action( 'wp_footer', function() {
 
 ### File-Based Snippets
 
-Place PHP files in the `/code-snippets/` directory:
+Place PHP files in `wp-content/mc-snippets/`. That folder sits outside the plugin, so an update does not remove your snippets. Point `MC_FUNCTIONALITY_SNIPPETS_DIR` at another directory if you want them somewhere else.
 
 ```
-wp-content/plugins/mc-functionality/code-snippets/
+wp-content/mc-snippets/
 ├── custom-shortcodes.php
 ├── theme-modifications.php
 ├── admin-customizations.php
