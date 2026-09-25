@@ -41,6 +41,21 @@ if ( ! defined( 'WPINC' ) ) {
 		
 		<?php submit_button( 'Save Settings' ); ?>
 	</form>
+
+	<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
+		<input type="hidden" name="action" value="mc_functionality_clear_flag" />
+		<?php wp_nonce_field( 'mc_functionality_clear_flag' ); ?>
+		<p class="description">If safe mode turned every snippet off, this turns them back on.</p>
+		<?php submit_button( 'Turn snippets back on' ); ?>
+	</form>
+	<?php
+	require_once dirname( __DIR__, 3 ) . '/includes/class-mc-functionality-standalone.php';
+	$mc_mu_file = WP_CONTENT_DIR . '/mu-plugins/mc-functionality-loader.php';
+	$mc_notice  = Mc_Functionality_Standalone::notice( $mc_mu_file );
+	if ( '' !== $mc_notice ) {
+		echo '<div class="notice notice-warning"><p>' . esc_html( $mc_notice ) . '</p></div>';
+	}
+	?>
 	
 	<!-- Environment Information -->
 	<div class="mc-environment-info">
@@ -74,10 +89,10 @@ if ( ! defined( 'WPINC' ) ) {
 							$memory_bytes = $value;
 					}
 					
-					if ( $memory_bytes < 64 * 1024 * 1024 ) { // Less than 64MB
-						echo '<br><span class="dashicons dashicons-warning" style="color: #dba617;"></span> <em>Consider increasing for better snippet performance</em>';
+					if ( $memory_bytes < 64 * 1024 * 1024 ) {
+						echo '<p class="description mc-rf-settings__status mc-rf-settings__status--warn"><span class="dashicons dashicons-warning" aria-hidden="true"></span> ' . esc_html__( 'Consider increasing for better snippet performance', 'mc-functionality' ) . '</p>';
 					} else {
-						echo '<br><span class="dashicons dashicons-yes-alt" style="color: #46b450;"></span> <em>Good for snippet execution</em>';
+						echo '<p class="description mc-rf-settings__status mc-rf-settings__status--ok"><span class="dashicons dashicons-yes-alt" aria-hidden="true"></span> ' . esc_html__( 'Good for snippet execution', 'mc-functionality' ) . '</p>';
 					}
 					?>
 				</td>
@@ -89,9 +104,9 @@ if ( ! defined( 'WPINC' ) ) {
 					<?php 
 					$max_execution_time = ini_get( 'max_execution_time' );
 					if ( $max_execution_time > 0 && $max_execution_time < 30 ) {
-						echo '<br><span class="dashicons dashicons-warning" style="color: #dba617;"></span> <em>Consider increasing for complex snippets</em>';
+						echo '<p class="description mc-rf-settings__status mc-rf-settings__status--warn"><span class="dashicons dashicons-warning" aria-hidden="true"></span> ' . esc_html__( 'Consider increasing for complex snippets', 'mc-functionality' ) . '</p>';
 					} else {
-						echo '<br><span class="dashicons dashicons-yes-alt" style="color: #46b450;"></span> <em>Good for snippet execution</em>';
+						echo '<p class="description mc-rf-settings__status mc-rf-settings__status--ok"><span class="dashicons dashicons-yes-alt" aria-hidden="true"></span> ' . esc_html__( 'Good for snippet execution', 'mc-functionality' ) . '</p>';
 					}
 					?>
 				</td>
@@ -102,18 +117,15 @@ if ( ! defined( 'WPINC' ) ) {
 					<code><?php echo esc_html( PHP_VERSION ); ?></code>
 					<?php 
 					if ( version_compare( PHP_VERSION, '7.4', '>=' ) ) {
-						echo '<br><span class="dashicons dashicons-yes-alt" style="color: #46b450;"></span> <em>Good for modern PHP features</em>';
+						echo '<p class="description mc-rf-settings__status mc-rf-settings__status--ok"><span class="dashicons dashicons-yes-alt" aria-hidden="true"></span> ' . esc_html__( 'Good for modern PHP features', 'mc-functionality' ) . '</p>';
 					} else {
-						echo '<br><span class="dashicons dashicons-warning" style="color: #dba617;"></span> <em>Consider upgrading for better performance</em>';
+						echo '<p class="description mc-rf-settings__status mc-rf-settings__status--warn"><span class="dashicons dashicons-warning" aria-hidden="true"></span> ' . esc_html__( 'Consider upgrading for better performance', 'mc-functionality' ) . '</p>';
 					}
 					?>
 				</td>
 			</tr>
 		</table>
 		
-		<p class="description">
-			<strong>Note:</strong> These settings affect how much memory and time your snippets can use. 
-			The validation system will warn you if your code might exceed these limits.
-		</p>
+		<p class="description"><?php esc_html_e( 'These limits are what PHP will allow a snippet to use. The editor warns you when a snippet looks like it would exceed them.', 'mc-functionality' ); ?></p>
 	</div>
 </div>

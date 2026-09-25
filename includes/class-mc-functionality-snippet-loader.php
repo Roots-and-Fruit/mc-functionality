@@ -1,354 +1,403 @@
 <?php
-
 /**
- * The snippet loader class
- *
- * Responsible for loading and executing PHP files from the code-snippets directory.
- *
- * @link       https://www.mattcromwell.com
- * @since      1.0.0
+ * Loads snippet files from the store.
  *
  * @package    Mc_Functionality
  * @subpackage Mc_Functionality/includes
  */
 
 /**
- * The snippet loader class.
+ * Includes enabled PHP snippets and quarantines the file that raised a fatal.
  *
- * Loads and executes PHP files from the code-snippets directory safely.
- *
- * @since      1.0.0
- * @package    Mc_Functionality
- * @subpackage Mc_Functionality/includes
- * @author     Matt Cromwell <info@mattcromwell.com>
+ * @since 1.0.0
  */
 class Mc_Functionality_Snippet_Loader {
 
-	/**
-	 * The path to the code snippets directory.
-	 *
-	 * @since    1.0.0
-	 * @access   private
-	 * @var      string    $snippets_dir    The path to the code snippets directory.
-	 */
-	private $snippets_dir;
+	const FATAL_ERROR_TYPES = array( E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR, E_USER_ERROR );
 
 	/**
-	 * Initialize the snippet loader.
-	 *
-	 * @since    1.0.0
+	 * @var string[]
 	 */
-	public function __construct() {
-		$this->snippets_dir = MC_FUNCTIONALITY_SNIPPETS_DIR;
+	public $enqueued_styles = array();
+
+	/**
+	 * @var string[]
+	 */
+	public $enqueued_scripts = array();
+
+	/**
+	 * @var Mc_Functionality_Snippet_Store
+	 */
+	private $store;
+
+	/**
+	 * Snippet paths currently inside require_once, innermost last.
+	 *
+	 * @var string[]
+	 */
+	private static $running = array();
+
+	/**
+	 * @var bool
+	 */
+	private static $shutdown_registered = false;
+
+	/**
+	 * @param string|null $dir Optional directory. Tests pass a temp dir.
+	 */
+	public function __construct( $dir = null ) {
+		require_once __DIR__ . '/class-mc-functionality-snippet-store.php';
+		$this->store = new Mc_Functionality_Snippet_Store( $dir );
+		$this->register_shutdown();
 	}
 
 	/**
-	 * Load all PHP snippets from the snippets directory.
-	 *
-	 * @since    1.0.0
+	 * @var array<int, array<string, mixed>>
 	 */
-	public function load_snippets() {
-		if ( ! is_dir( $this->snippets_dir ) ) {
+	private $scheduled = array();
+
+	/**
+	 * Record CSS and JS files. Do not include them.
+	 *
+	 * @return void
+	 */
+	public function enqueue_assets() {
+		foreach ( $this->store->asset_files() as $path ) {
+			$ext = pathinfo( $path, PATHINFO_EXTENSION );
+			if ( 'css' === $ext ) {
+				$this->enqueued_styles[] = $path;
+				if ( function_exists( 'wp_enqueue_style' ) ) {
+					wp_enqueue_style( 'mc-snippet-' . md5( $path ), $path, array(), (string) filemtime( $path ) );
+				}
+			}
+			if ( 'js' === $ext ) {
+				$this->enqueued_scripts[] = $path;
+				if ( function_exists( 'wp_enqueue_script' ) ) {
+					wp_enqueue_script( 'mc-snippet-' . md5( $path ), $path, array(), (string) filemtime( $path ), true );
+				}
+			}
+		}
+	}
+
+	/**
+	 * Render a content snippet for [mc_snippet id="basename"].
+	 *
+	 * @param array<string, string>|string $atts Shortcode attributes.
+	 * @return string
+	 */
+	public function render_shortcode( $atts ) {
+		require_once __DIR__ . '/class-mc-functionality-snippet-meta.php';
+		$id = '';
+		if ( is_array( $atts ) && isset( $atts['id'] ) ) {
+			$id = (string) $atts['id'];
+		}
+		$id = basename( $id );
+		if ( '' === $id ) {
+			return '';
+		}
+		$path = $this->store->get_dir() . '/' . $id . '.php';
+		if ( ! is_file( $path ) ) {
+			return '';
+		}
+		$meta = Mc_Functionality_Snippet_Meta::parse( (string) file_get_contents( $path ) );
+		if ( 'content' !== $meta['type'] ) {
+			return '';
+		}
+		self::push( $path );
+		ob_start();
+		include $path;
+		$output = ob_get_clean();
+		self::pop();
+		if ( ! is_string( $output ) ) {
+			return '';
+		}
+		return $output;
+	}
+
+	/**
+	 * Include every enabled PHP file that is allowed to run now.
+	 *
+	 * @param array<string, mixed>|null $context Optional request context for tests.
+	 * @return void
+	 */
+	public function load_snippets( $context = null ) {
+		if ( $this->store->is_disabled() ) {
 			return;
 		}
-
-		// Get all .php files (excluding .php.disabled files)
-		$php_files = glob( $this->snippets_dir . '/*.php' );
-		
-		if ( empty( $php_files ) ) {
-			return;
+		require_once __DIR__ . '/class-mc-functionality-snippet-meta.php';
+		if ( null === $context ) {
+			$context = self::current_context();
 		}
-
-		foreach ( $php_files as $file_path ) {
-			// Skip if this is a disabled file
-			if ( $this->is_disabled_file( $file_path ) ) {
+		$this->enqueue_assets();
+		if ( function_exists( 'add_shortcode' ) ) {
+			add_shortcode( 'mc_snippet', array( $this, 'render_shortcode' ) );
+		}
+		$files = $this->store->enabled_php_files();
+		usort(
+			$files,
+			function ( $a, $b ) {
+				$meta_a = Mc_Functionality_Snippet_Meta::parse( (string) file_get_contents( $a ) );
+				$meta_b = Mc_Functionality_Snippet_Meta::parse( (string) file_get_contents( $b ) );
+				return $meta_a['priority'] <=> $meta_b['priority'];
+			}
+		);
+		foreach ( $files as $path ) {
+			$meta = Mc_Functionality_Snippet_Meta::parse( (string) file_get_contents( $path ) );
+			if ( 'php' !== $meta['type'] && '' !== $meta['type'] ) {
 				continue;
 			}
-			
-			// Skip index.php (security file, not a snippet)
-			if ( basename( $file_path ) === 'index.php' ) {
+			if ( self::should_defer( $meta ) ) {
+				$this->scheduled[] = array(
+					'path' => $path,
+					'meta' => $meta,
+				);
+				if ( function_exists( 'add_action' ) ) {
+					$hook = isset( $meta['hook'] ) ? (string) $meta['hook'] : '';
+					if ( ! Mc_Functionality_Snippet_Meta::is_allowed_hook( $hook ) || 'plugins_loaded' === $hook ) {
+						$hook = 'init';
+					}
+					add_action(
+						$hook,
+						function () use ( $path ) {
+							$this->include_if_matched( $path );
+						},
+						(int) $meta['priority']
+					);
+				}
 				continue;
 			}
-			
-			if ( $this->is_valid_snippet_file( $file_path ) ) {
-				$this->load_snippet_file( $file_path );
+			if ( ! self::context_allows( $meta, $context ) ) {
+				continue;
 			}
+			$this->include_file( $path );
 		}
 	}
 
 	/**
-	 * Load a single snippet file safely.
+	 * Run snippets that were deferred, using the context at hook time.
 	 *
-	 * @since    1.0.0
-	 * @access   private
-	 * @param    string    $file_path    The path to the PHP file to load.
+	 * @param array<string, mixed> $context Request context.
+	 * @return void
 	 */
-	private function load_snippet_file( $file_path ) {
-		// Validate file path
-		if ( ! $this->is_valid_snippet_file( $file_path ) ) {
-			return;
-		}
-
-		// Load the file safely with comprehensive error handling
-		try {
-			// Set up error handling to catch fatal errors
-			set_error_handler( array( $this, 'handle_snippet_error' ) );
-			
-			// Load the file
-			require_once $file_path;
-			
-			// Restore error handler
-			restore_error_handler();
-			
-		} catch ( Error $e ) {
-			// Catch fatal errors (PHP 7+)
-			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-				error_log( 'MC Functionality: Fatal error loading snippet file: ' . $file_path . ' - ' . $e->getMessage() . ' on line ' . $e->getLine() );
+	public function run_scheduled( $context ) {
+		require_once __DIR__ . '/class-mc-functionality-snippet-meta.php';
+		foreach ( $this->scheduled as $item ) {
+			if ( ! Mc_Functionality_Snippet_Meta::matches( $item['meta'], $context ) ) {
+				continue;
 			}
-			restore_error_handler();
-		} catch ( Exception $e ) {
-			// Catch regular exceptions
-			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-				error_log( 'MC Functionality: Exception loading snippet file: ' . $file_path . ' - ' . $e->getMessage() );
+			if ( ! self::context_allows( $item['meta'], $context ) ) {
+				continue;
 			}
-			restore_error_handler();
+			$this->include_file( $item['path'] );
 		}
 	}
 
 	/**
-	 * Handle errors during snippet loading.
-	 *
-	 * @since    1.0.0
-	 * @param    int    $errno      Error level.
-	 * @param    string $errstr     Error message.
-	 * @param    string $errfile    File where error occurred.
-	 * @param    int    $errline    Line number where error occurred.
-	 * @return   bool               True to prevent default error handler.
+	 * @param array<string, mixed> $meta Parsed header.
+	 * @return bool
 	 */
-	public function handle_snippet_error( $errno, $errstr, $errfile, $errline ) {
-		// Only handle fatal errors
-		if ( $errno === E_ERROR || $errno === E_PARSE || $errno === E_CORE_ERROR || $errno === E_COMPILE_ERROR ) {
-			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-				error_log( 'MC Functionality: Fatal error in snippet file: ' . $errfile . ' - ' . $errstr . ' on line ' . $errline );
-			}
-			return true; // Prevent default error handler
+	private static function should_defer( $meta ) {
+		if ( Mc_Functionality_Snippet_Meta::has_condition( $meta ) ) {
+			return true;
 		}
-		
-		return false; // Let default error handler handle other errors
+		$hook = isset( $meta['hook'] ) ? (string) $meta['hook'] : '';
+		if ( '' === $hook ) {
+			return false;
+		}
+		if ( ! Mc_Functionality_Snippet_Meta::is_allowed_hook( $hook ) ) {
+			return false;
+		}
+		return 'plugins_loaded' !== $hook;
 	}
 
 	/**
-	 * Validate if a file is a safe snippet file to load.
-	 *
-	 * @since    1.0.0
-	 * @access   private
-	 * @param    string    $file_path    The path to the file to validate.
-	 * @return   bool                    True if the file is valid, false otherwise.
+	 * @param array<string, mixed> $meta    Parsed header.
+	 * @param array<string, mixed> $context Request context.
+	 * @return bool
 	 */
-	private function is_valid_snippet_file( $file_path ) {
-		// Check if file exists and is readable
-		if ( ! file_exists( $file_path ) || ! is_readable( $file_path ) ) {
+	private static function context_allows( $meta, $context ) {
+		$where = isset( $meta['run_context'] ) ? (string) $meta['run_context'] : 'everywhere';
+		$admin = ! empty( $context['is_admin'] );
+		if ( 'admin-only' === $where && ! $admin ) {
 			return false;
 		}
-
-		// Check if file is within the snippets directory (security check)
-		$real_file_path = realpath( $file_path );
-		$real_snippets_dir = realpath( $this->snippets_dir );
-		
-		if ( $real_file_path === false || $real_snippets_dir === false ) {
+		if ( 'frontend-only' === $where && $admin ) {
 			return false;
 		}
-
-		// Ensure the file is within the snippets directory
-		if ( strpos( $real_file_path, $real_snippets_dir ) !== 0 ) {
-			return false;
-		}
-
-		// Check if file has .php extension
-		if ( pathinfo( $file_path, PATHINFO_EXTENSION ) !== 'php' ) {
-			return false;
-		}
-
-		// Skip index.php files
-		if ( basename( $file_path ) === 'index.php' ) {
-			return false;
-		}
-
 		return true;
 	}
 
 	/**
-	 * Check if a file is disabled (has .disabled extension).
-	 *
-	 * @since    1.0.0
-	 * @param    string $file_path The file path to check.
-	 * @return   bool   True if file is disabled, false otherwise.
+	 * @return array<string, mixed>
 	 */
-	private function is_disabled_file( $file_path ) {
-		return file_exists( $file_path . '.disabled' );
+	public static function current_context() {
+		$roles = array();
+		if ( function_exists( 'wp_get_current_user' ) ) {
+			$user = wp_get_current_user();
+			if ( isset( $user->roles ) && is_array( $user->roles ) ) {
+				$roles = $user->roles;
+			}
+		}
+		$post_type = '';
+		if ( function_exists( 'get_post_type' ) ) {
+			$found = get_post_type();
+			if ( is_string( $found ) ) {
+				$post_type = $found;
+			}
+		}
+		$url = isset( $_SERVER['REQUEST_URI'] ) ? (string) $_SERVER['REQUEST_URI'] : '';
+		return array(
+			'is_admin'  => function_exists( 'is_admin' ) && is_admin(),
+			'logged_in' => function_exists( 'is_user_logged_in' ) && is_user_logged_in(),
+			'roles'     => $roles,
+			'post_type' => $post_type,
+			'url'       => $url,
+			'timestamp' => time(),
+		);
 	}
 
 	/**
-	 * Get the enabled/disabled status of a snippet file.
+	 * Include one file when its header matches the current request.
 	 *
-	 * @since    1.0.0
-	 * @param    string $filename The filename to check.
-	 * @return   bool   True if enabled, false if disabled.
+	 * @param string $path Absolute path.
+	 * @return void
+	 */
+	public function include_if_matched( $path ) {
+		require_once __DIR__ . '/class-mc-functionality-snippet-meta.php';
+		if ( ! is_file( $path ) ) {
+			return;
+		}
+		$meta = Mc_Functionality_Snippet_Meta::parse( (string) file_get_contents( $path ) );
+		$context = self::current_context();
+		if ( ! Mc_Functionality_Snippet_Meta::matches( $meta, $context ) ) {
+			return;
+		}
+		if ( ! self::context_allows( $meta, $context ) ) {
+			return;
+		}
+		$this->include_file( $path );
+	}
+
+	/**
+	 * @param string $path Absolute path.
+	 * @return void
+	 */
+	public function include_file( $path ) {
+		if ( ! $this->store->is_loadable_php( $path ) ) {
+			return;
+		}
+		self::push( $path );
+		require_once $path;
+		self::pop();
+	}
+
+	/**
+	 * @param string $path Absolute snippet path.
+	 * @return void
+	 */
+	public static function push( $path ) {
+		self::$running[] = $path;
+	}
+
+	/**
+	 * @return void
+	 */
+	public static function pop() {
+		array_pop( self::$running );
+	}
+
+	/**
+	 * @return string
+	 */
+	public static function running_snippet() {
+		if ( ! self::$running ) {
+			return '';
+		}
+		return (string) end( self::$running );
+	}
+
+	/**
+	 * @return void
+	 */
+	private function register_shutdown() {
+		if ( self::$shutdown_registered ) {
+			return;
+		}
+		self::$shutdown_registered = true;
+		register_shutdown_function( array( __CLASS__, 'handle_shutdown' ) );
+	}
+
+	/**
+	 * Rename the running snippet when the request died on a fatal error.
+	 *
+	 * @return void
+	 */
+	public static function handle_shutdown() {
+		$error = error_get_last();
+		if ( ! is_array( $error ) || ! isset( $error['type'] ) ) {
+			return;
+		}
+		if ( ! in_array( $error['type'], self::FATAL_ERROR_TYPES, true ) ) {
+			return;
+		}
+		$path = self::running_snippet();
+		if ( '' === $path && ! empty( $error['file'] ) ) {
+			$path = $error['file'];
+		}
+		if ( '' === $path || ! is_file( $path ) ) {
+			return;
+		}
+		$store = new Mc_Functionality_Snippet_Store( dirname( $path ) );
+		if ( ! $store->is_inside( $path ) ) {
+			return;
+		}
+		$message = isset( $error['message'] ) ? $error['message'] : '';
+		$line    = isset( $error['line'] ) ? (int) $error['line'] : 0;
+		$store->quarantine( $path, $message, $line );
+	}
+
+	/**
+	 * @param string $filename Basename.
+	 * @return bool
 	 */
 	public function is_snippet_enabled( $filename ) {
-		$file_path = $this->snippets_dir . '/' . $filename;
-		return ! $this->is_disabled_file( $file_path );
+		return $this->store->is_enabled( $filename );
 	}
 
 	/**
-	 * Enable a snippet by removing the .disabled extension.
-	 *
-	 * @since    1.0.0
-	 * @param    string $filename The filename to enable.
-	 * @return   bool   True on success, false on failure.
+	 * @param string $filename Basename.
+	 * @return bool
 	 */
 	public function enable_snippet( $filename ) {
-		$file_path = $this->snippets_dir . '/' . $filename;
-		$disabled_path = $file_path . '.disabled';
-		
-		error_log( 'MC Functionality: Enable snippet - File path: ' . $file_path );
-		error_log( 'MC Functionality: Enable snippet - Disabled path: ' . $disabled_path );
-		
-		// Check if disabled file exists
-		if ( ! file_exists( $disabled_path ) ) {
-			error_log( 'MC Functionality: Enable snippet - Disabled file does not exist, already enabled' );
-			return true; // Already enabled
-		}
-		
-		// Validate the disabled file is within snippets directory
-		$real_disabled_path = realpath( $disabled_path );
-		$real_snippets_dir = realpath( $this->snippets_dir );
-		
-		if ( $real_disabled_path === false || $real_snippets_dir === false || strpos( $real_disabled_path, $real_snippets_dir ) !== 0 ) {
-			error_log( 'MC Functionality: Enable snippet - Path validation failed' );
-			return false;
-		}
-		
-		// Remove .disabled extension
-		$result = rename( $disabled_path, $file_path );
-		error_log( 'MC Functionality: Enable snippet - Rename result: ' . ( $result ? 'true' : 'false' ) );
-		return $result;
+		return $this->store->enable( $filename );
 	}
 
 	/**
-	 * Disable a snippet by adding the .disabled extension.
-	 *
-	 * @since    1.0.0
-	 * @param    string $filename The filename to disable.
-	 * @return   bool   True on success, false on failure.
+	 * @param string $filename Basename.
+	 * @return bool
 	 */
 	public function disable_snippet( $filename ) {
-		$file_path = $this->snippets_dir . '/' . $filename;
-		$disabled_path = $file_path . '.disabled';
-		
-		error_log( 'MC Functionality: Disable snippet - File path: ' . $file_path );
-		error_log( 'MC Functionality: Disable snippet - Disabled path: ' . $disabled_path );
-		
-		// Check if already disabled
-		if ( file_exists( $disabled_path ) ) {
-			error_log( 'MC Functionality: Disable snippet - Already disabled' );
-			return true; // Already disabled
-		}
-		
-		// Validate the file exists and is within snippets directory
-		if ( ! $this->is_valid_snippet_file( $file_path ) ) {
-			error_log( 'MC Functionality: Disable snippet - Invalid file validation failed' );
-			return false;
-		}
-		
-		// Add .disabled extension
-		$result = rename( $file_path, $disabled_path );
-		error_log( 'MC Functionality: Disable snippet - Rename result: ' . ( $result ? 'true' : 'false' ) );
-		return $result;
+		return $this->store->disable( $filename );
 	}
 
 	/**
-	 * Get the list of loaded snippet files.
-	 *
-	 * @since    1.0.0
-	 * @access   public
-	 * @return   array    Array of loaded snippet file paths.
+	 * @return string[]
 	 */
 	public function get_loaded_snippets() {
-		if ( ! is_dir( $this->snippets_dir ) ) {
-			return array();
-		}
-
-		$php_files = glob( $this->snippets_dir . '/*.php' );
-		$valid_files = array();
-
-		foreach ( $php_files as $file ) {
-			if ( $this->is_valid_snippet_file( $file ) ) {
-				$valid_files[] = $file;
-			}
-		}
-
-		return $valid_files;
+		return $this->store->enabled_php_files();
 	}
 
 	/**
-	 * Get all snippets (enabled and disabled) for admin display.
-	 *
-	 * @since    1.0.0
-	 * @access   public
-	 * @return   array    Array of snippet data for admin display.
+	 * @return array<int, array<string, mixed>>
 	 */
 	public function get_all_snippets() {
-		if ( ! is_dir( $this->snippets_dir ) ) {
-			return array();
-		}
-
-		$all_snippets = array();
-		
-		// Get all .php files (enabled snippets)
-		$php_files = glob( $this->snippets_dir . '/*.php' );
-		foreach ( $php_files as $file_path ) {
-			$filename = basename( $file_path );
-			
-			// Skip index.php
-			if ( $filename === 'index.php' ) {
-				continue;
-			}
-			
-			// Skip if this is a disabled file
-			if ( $this->is_disabled_file( $file_path ) ) {
-				continue;
-			}
-			
-			if ( $this->is_valid_snippet_file( $file_path ) ) {
-				$all_snippets[] = array(
-					'filename' => $filename,
-					'path' => $file_path,
-					'enabled' => true,
-					'status' => 'enabled'
-				);
-			}
-		}
-		
-		// Get all .php.disabled files (disabled snippets)
-		$disabled_files = glob( $this->snippets_dir . '/*.php.disabled' );
-		foreach ( $disabled_files as $file_path ) {
-			$filename = basename( $file_path, '.disabled' );
-			
-			// Skip index.php
-			if ( $filename === 'index.php' ) {
-				continue;
-			}
-			
-			$all_snippets[] = array(
-				'filename' => $filename,
-				'path' => $file_path,
-				'enabled' => false,
-				'status' => 'disabled'
-			);
-		}
-		
-		return $all_snippets;
+		return $this->store->all_snippets();
 	}
 
+	/**
+	 * @return Mc_Functionality_Snippet_Store
+	 */
+	public function store() {
+		return $this->store;
+	}
 }

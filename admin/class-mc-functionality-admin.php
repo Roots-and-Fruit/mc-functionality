@@ -157,172 +157,10 @@ class Mc_Functionality_Admin {
 	 * @return   true|WP_Error    True if valid, WP_Error if error.
 	 */
 	private function validate_php_code( $php_code ) {
-		// Basic content validation
-		if ( empty( trim( $php_code ) ) ) {
-			return new WP_Error( 'empty_content', 'Snippet content cannot be empty.' );
-		}
-
-		// Check for dangerous functions
-		$dangerous_functions = array( 'eval', 'exec', 'system', 'shell_exec', 'passthru' );
-		foreach ( $dangerous_functions as $func ) {
-			if ( strpos( $php_code, $func . '(' ) !== false ) {
-				return new WP_Error( 'dangerous_function', "The use of '$func()' function is not allowed for security reasons." );
-			}
-		}
-
-		// Add <?php tag if not present
-		if ( strpos( trim( $php_code ), '<?php' ) !== 0 ) {
-			$php_code = "<?php\n" . $php_code;
-		}
-
-		// Use PHP's built-in tokenizer for syntax validation
-		$tokens = token_get_all( $php_code );
-		if ( $tokens === false ) {
-			return new WP_Error( 'syntax_error', 'Unable to parse PHP code. Please check for syntax errors like missing semicolons, brackets, or quotes.' );
-		}
-
-		// Check for obvious fatal error patterns (only exact matches to avoid false positives)
-		$dangerous_patterns = array(
-			'undefined_function_name',
-			'undefined_class_name',
-			'undefined_constant',
-		);
-		
-		foreach ( $dangerous_patterns as $pattern ) {
-			if ( strpos( $php_code, $pattern ) !== false ) {
-				return new WP_Error( 'potential_fatal_error', "Code contains potentially undefined function/class: $pattern" );
-			}
-		}
-		
-		// Add debug logging to see if we reach the runtime test
-		error_log( 'MC Functionality: validate_php_code() - Static checks passed, proceeding to runtime test' );
-
-		// Test for runtime fatal errors by executing the code in a safe environment
-		error_log( 'MC Functionality: About to call test_runtime_execution()' );
-		$runtime_error = $this->test_runtime_execution( $php_code );
-		error_log( 'MC Functionality: test_runtime_execution() returned: ' . ( is_wp_error( $runtime_error ) ? 'ERROR: ' . $runtime_error->get_error_message() : 'SUCCESS' ) );
-		
-		if ( is_wp_error( $runtime_error ) ) {
-			return $runtime_error;
-		}
-
-		return true;
+		require_once plugin_dir_path( dirname( __FILE__ ) ) . 'includes/class-mc-functionality-php-lint.php';
+		return Mc_Functionality_Php_Lint::check( $php_code );
 	}
 
-	/**
-	 * Test code execution in a safe environment to catch runtime fatal errors.
-	 *
-	 * @since    1.0.0
-	 * @param    string    $php_code    The PHP code to test.
-	 * @return   true|WP_Error    True if valid, WP_Error if error.
-	 */
-	private function test_runtime_execution( $php_code ) {
-		error_log( 'MC Functionality: Testing runtime execution...' );
-		
-		// Get list of functions defined in this snippet
-		$defined_functions = array();
-		if ( preg_match_all( '/function\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\(/', $php_code, $matches ) ) {
-			$defined_functions = $matches[1];
-			error_log( 'MC Functionality: Functions defined in snippet: ' . implode( ', ', $defined_functions ) );
-		}
-		
-		// Extract function calls from the code
-		if ( preg_match_all( '/([a-zA-Z_][a-zA-Z0-9_]*)\s*\(/', $php_code, $matches ) ) {
-			$function_calls = array_unique( $matches[1] );
-			error_log( 'MC Functionality: Found function calls: ' . implode( ', ', $function_calls ) );
-			
-			// List of built-in PHP functions and WordPress functions that are safe
-			$safe_functions = array(
-				// PHP built-in functions
-				'echo', 'print', 'var_dump', 'print_r', 'isset', 'empty', 'is_array', 'is_string', 'is_numeric',
-				'strlen', 'strpos', 'str_replace', 'substr', 'trim', 'explode', 'implode', 'array_merge',
-				'count', 'sizeof', 'array_keys', 'array_values', 'in_array', 'array_search',
-				'date', 'time', 'strtotime', 'date_format', 'microtime',
-				'file_exists', 'is_file', 'is_dir', 'file_get_contents', 'file_put_contents',
-				'json_encode', 'json_decode', 'serialize', 'unserialize',
-				'add_action', 'add_filter', 'apply_filters', 'do_action', 'wp_enqueue_script', 'wp_enqueue_style',
-				'get_option', 'update_option', 'delete_option', 'get_post_meta', 'update_post_meta',
-				'wp_insert_post', 'wp_update_post', 'wp_delete_post', 'get_posts', 'get_pages',
-				'wp_query', 'get_the_title', 'get_the_content', 'get_the_excerpt',
-				'esc_html', 'esc_attr', 'esc_url', 'sanitize_text_field', 'wp_kses_post',
-				'current_user_can', 'is_user_logged_in', 'wp_get_current_user',
-				'admin_url', 'site_url', 'home_url', 'get_template_directory', 'get_stylesheet_directory',
-				'wp_upload_dir', 'wp_mail', 'wp_redirect', 'wp_die', 'wp_send_json_success', 'wp_send_json_error',
-				// Add more WordPress functions as needed
-			);
-			
-			foreach ( $function_calls as $function ) {
-				// Skip if it's a safe function
-				if ( in_array( $function, $safe_functions ) ) {
-					continue;
-				}
-				
-				// Skip if it's a variable function call (e.g., $func())
-				if ( $function[0] === '$' ) {
-					continue;
-				}
-				
-				// Skip if it's defined in this snippet
-				if ( in_array( $function, $defined_functions ) ) {
-					continue;
-				}
-				
-				// Check if the function exists
-				if ( ! function_exists( $function ) ) {
-					error_log( 'MC Functionality: Undefined function detected: ' . $function );
-					return new WP_Error( 'runtime_error', "The function '$function' does not exist. Please check the function name or define it before using." );
-				}
-			}
-		}
-		
-		// Check for class instantiation
-		if ( preg_match_all( '/new\s+([a-zA-Z_][a-zA-Z0-9_]*)/', $php_code, $matches ) ) {
-			$classes = array_unique( $matches[1] );
-			error_log( 'MC Functionality: Found class instantiations: ' . implode( ', ', $classes ) );
-			
-			foreach ( $classes as $class ) {
-				if ( ! class_exists( $class ) ) {
-					error_log( 'MC Functionality: Undefined class detected: ' . $class );
-					return new WP_Error( 'runtime_error', "The class '$class' does not exist. Please check the class name or ensure it's properly included." );
-				}
-			}
-		}
-		
-		// Check for type errors only for functions defined in this snippet
-		foreach ( $defined_functions as $func_name ) {
-			// Look for function calls to this function
-			if ( preg_match_all( '/' . preg_quote( $func_name ) . '\s*\(([^)]*)\)/', $php_code, $call_matches ) ) {
-				foreach ( $call_matches[1] as $args ) {
-					// Check if arguments contain arrays that might cause type errors
-					if ( preg_match( '/\[.*\]/', $args ) ) {
-						// Look for the function definition to check for type hints
-						if ( preg_match( '/function\s+' . preg_quote( $func_name ) . '\s*\([^)]*\)\s*\{/', $php_code, $def_match ) ) {
-							$func_def = $def_match[0];
-							if ( preg_match( '/string\s+\$/', $func_def ) ) {
-								error_log( 'MC Functionality: Type error detected - array passed to string parameter in function: ' . $func_name );
-								return new WP_Error( 'runtime_error', "Type error: The function '$func_name' expects a string parameter, but an array is being passed. This will cause a fatal TypeError at runtime." );
-							}
-							if ( preg_match( '/int\s+\$/', $func_def ) ) {
-								error_log( 'MC Functionality: Type error detected - array passed to int parameter in function: ' . $func_name );
-								return new WP_Error( 'runtime_error', "Type error: The function '$func_name' expects an integer parameter, but an array is being passed. This will cause a fatal TypeError at runtime." );
-							}
-							if ( preg_match( '/float\s+\$/', $func_def ) ) {
-								error_log( 'MC Functionality: Type error detected - array passed to float parameter in function: ' . $func_name );
-								return new WP_Error( 'runtime_error', "Type error: The function '$func_name' expects a float parameter, but an array is being passed. This will cause a fatal TypeError at runtime." );
-							}
-							if ( preg_match( '/bool\s+\$/', $func_def ) ) {
-								error_log( 'MC Functionality: Type error detected - array passed to bool parameter in function: ' . $func_name );
-								return new WP_Error( 'runtime_error', "Type error: The function '$func_name' expects a boolean parameter, but an array is being passed. This will cause a fatal TypeError at runtime." );
-							}
-						}
-					}
-				}
-			}
-		}
-		
-		error_log( 'MC Functionality: Runtime execution test passed' );
-		return true;
-	}
 
 	/**
 	 * Validate snippet content for syntax errors.
@@ -332,13 +170,15 @@ class Mc_Functionality_Admin {
 	 * @return   true|WP_Error    True if valid, WP_Error if syntax error.
 	 */
 	private function validate_snippet_content( $content ) {
-		// First, check for memory-hogging patterns
+		require_once plugin_dir_path( dirname( __FILE__ ) ) . 'includes/class-mc-functionality-snippet-meta.php';
+		$meta = Mc_Functionality_Snippet_Meta::parse( $content );
+		if ( 'css' === $meta['type'] || 'js' === $meta['type'] ) {
+			return true;
+		}
 		$memory_validation = $this->validate_memory_usage( $content );
 		if ( is_wp_error( $memory_validation ) ) {
 			return $memory_validation;
 		}
-		
-		// Then validate PHP syntax
 		return $this->validate_php_code( $content );
 	}
 
@@ -383,11 +223,10 @@ class Mc_Functionality_Admin {
 					$expression = trim( $expression );
 					error_log( 'MC Functionality: Raw expression: ' . $expression );
 					
-					// Only allow basic mathematical operations for security
+					// Only allow basic mathematical operations for security.
 					if ( preg_match( '/^[\d\s\*\+\-\(\)]+$/', $expression ) ) {
-						// Use eval() in a safe context to evaluate the expression
-						$count = @eval( 'return ' . $expression . ';' );
-						if ( $count === false || ! is_numeric( $count ) ) {
+						$count = $this->evaluate_math( $expression );
+						if ( false === $count ) {
 							error_log( 'MC Functionality: Could not evaluate expression: ' . $expression );
 							continue;
 						}
@@ -445,6 +284,104 @@ class Mc_Functionality_Admin {
 	}
 
 	/**
+	 * Evaluate a digits-and-arithmetic expression without eval().
+	 *
+	 * @param string $expression Expression limited to digits, whitespace, and + - * ( ).
+	 * @return int|false
+	 */
+	private function evaluate_math( $expression ) {
+		$expression = preg_replace( '/\s+/', '', (string) $expression );
+		if ( ! is_string( $expression ) || '' === $expression || ! preg_match( '/^[\d\*\+\-\(\)]+$/', $expression ) ) {
+			return false;
+		}
+		$pos   = 0;
+		$value = $this->parse_math_expression( $expression, $pos );
+		if ( false === $value || $pos !== strlen( $expression ) ) {
+			return false;
+		}
+		return (int) $value;
+	}
+
+	/**
+	 * @param string $expression Expression.
+	 * @param int    $pos        Cursor, passed by reference.
+	 * @return int|false
+	 */
+	private function parse_math_expression( $expression, &$pos ) {
+		$left = $this->parse_math_term( $expression, $pos );
+		if ( false === $left ) {
+			return false;
+		}
+		$len = strlen( $expression );
+		while ( $pos < $len && ( '+' === $expression[ $pos ] || '-' === $expression[ $pos ] ) ) {
+			$op = $expression[ $pos ];
+			++$pos;
+			$right = $this->parse_math_term( $expression, $pos );
+			if ( false === $right ) {
+				return false;
+			}
+			$left = ( '+' === $op ) ? $left + $right : $left - $right;
+		}
+		return $left;
+	}
+
+	/**
+	 * @param string $expression Expression.
+	 * @param int    $pos        Cursor, passed by reference.
+	 * @return int|false
+	 */
+	private function parse_math_term( $expression, &$pos ) {
+		$left = $this->parse_math_factor( $expression, $pos );
+		if ( false === $left ) {
+			return false;
+		}
+		$len = strlen( $expression );
+		while ( $pos < $len && '*' === $expression[ $pos ] ) {
+			++$pos;
+			$right = $this->parse_math_factor( $expression, $pos );
+			if ( false === $right ) {
+				return false;
+			}
+			$left = $left * $right;
+		}
+		return $left;
+	}
+
+	/**
+	 * @param string $expression Expression.
+	 * @param int    $pos        Cursor, passed by reference.
+	 * @return int|false
+	 */
+	private function parse_math_factor( $expression, &$pos ) {
+		$len = strlen( $expression );
+		if ( $pos >= $len ) {
+			return false;
+		}
+		if ( '-' === $expression[ $pos ] ) {
+			++$pos;
+			$value = $this->parse_math_factor( $expression, $pos );
+			return ( false === $value ) ? false : -$value;
+		}
+		if ( '(' === $expression[ $pos ] ) {
+			++$pos;
+			$value = $this->parse_math_expression( $expression, $pos );
+			if ( false === $value || $pos >= $len || ')' !== $expression[ $pos ] ) {
+				return false;
+			}
+			++$pos;
+			return $value;
+		}
+		if ( ! ctype_digit( $expression[ $pos ] ) ) {
+			return false;
+		}
+		$start = $pos;
+		while ( $pos < $len && ctype_digit( $expression[ $pos ] ) ) {
+			++$pos;
+		}
+		return (int) substr( $expression, $start, $pos - $start );
+	}
+
+	/**
 	 * Parse memory limit string to bytes.
 	 *
 	 * @since    1.0.0
@@ -488,7 +425,12 @@ class Mc_Functionality_Admin {
 		 * class.
 		 */
 
-		wp_enqueue_style( $this->plugin_name, plugin_dir_url( __FILE__ ) . 'css/mc-functionality-admin.css', array(), $this->version, 'all' );
+		$style_deps = array();
+		if ( ! function_exists( 'wp_get_icon' ) ) {
+			$style_deps[] = 'dashicons';
+		}
+
+		wp_enqueue_style( $this->plugin_name, plugin_dir_url( __FILE__ ) . 'css/mc-functionality-admin.css', $style_deps, $this->version, 'all' );
 
 	}
 
@@ -577,6 +519,7 @@ class Mc_Functionality_Admin {
 		
 		// Add Site Health test for snippet environment
 		add_filter( 'site_status_tests', array( $this, 'add_site_health_test' ) );
+		add_action( 'admin_post_mc_functionality_clear_flag', array( $this, 'handle_clear_flag' ) );
 	}
 
 	/**
@@ -593,6 +536,21 @@ class Mc_Functionality_Admin {
 		}
 		
 		return 'default';
+	}
+
+	/**
+	 * Clear the safe-mode flag for a user who can manage options.
+	 *
+	 * @return void
+	 */
+	public function handle_clear_flag() {
+		check_admin_referer( 'mc_functionality_clear_flag' );
+		require_once plugin_dir_path( dirname( __FILE__ ) ) . 'includes/class-mc-functionality-snippet-store.php';
+		$caps = current_user_can( 'manage_options' ) ? array( 'manage_options' => true ) : array();
+		$store = new Mc_Functionality_Snippet_Store();
+		$store->clear_flag( $caps );
+		wp_safe_redirect( admin_url( 'plugins.php?page=mc-functionality&tab=settings' ) );
+		exit;
 	}
 
 	/**
@@ -782,6 +740,7 @@ class Mc_Functionality_Admin {
 
 		// Update content with metadata
 		$updated_content = $this->update_snippet_metadata( $content, $run_context, $priority );
+		$updated_content = Mc_Functionality_Snippet_Meta::ensure_guard( $updated_content );
 		
 		// Debug logging
 		error_log( 'MC Functionality: Original content length: ' . strlen( $content ) );
@@ -877,6 +836,8 @@ class Mc_Functionality_Admin {
 
 		// Generate initial content
 		$content = $this->generate_snippet_template( $name, $description );
+		require_once plugin_dir_path( dirname( __FILE__ ) ) . 'includes/class-mc-functionality-snippet-meta.php';
+		$content = Mc_Functionality_Snippet_Meta::ensure_guard( $content );
 
 		// Write file content as .disabled (will be enabled after first successful save)
 		$result = file_put_contents( $disabled_path, $content );
@@ -963,7 +924,7 @@ class Mc_Functionality_Admin {
 		$filename = trim( $filename, '-' );
 		
 		// Ensure it ends with .php
-		if ( ! str_ends_with( $filename, '.php' ) ) {
+		if ( '.php' !== substr( $filename, -4 ) ) {
 			$filename .= '.php';
 		}
 		
@@ -1004,56 +965,8 @@ class Mc_Functionality_Admin {
 	 * @return   array  Array with 'run_context' and 'priority' values.
 	 */
 	private function parse_snippet_metadata( $content ) {
-		$metadata = array(
-			'run_context' => 'everywhere',
-			'priority' => 10
-		);
-		
-		// Debug: Log the content being parsed
-		error_log( 'MC Functionality: Parsing content: ' . substr( $content, 0, 500 ) );
-		
-		// Look for Run-Context in comment block (more flexible pattern)
-		if ( preg_match( '/Run-Context:\s*([a-zA-Z0-9\-]+)/', $content, $matches ) ) {
-			$metadata['run_context'] = $matches[1];
-			error_log( 'MC Functionality: Found Run-Context: ' . $matches[1] );
-		} elseif ( preg_match( '/run_context:\s*([a-zA-Z0-9\-]+)/', $content, $matches ) ) {
-			$metadata['run_context'] = $matches[1];
-			error_log( 'MC Functionality: Found run_context: ' . $matches[1] );
-		} else {
-			error_log( 'MC Functionality: No Run-Context found, using default: everywhere' );
-		}
-		
-		// Look for Priority in comment block (more flexible pattern)
-		if ( preg_match( '/Priority:\s*(\d+)/', $content, $matches ) ) {
-			$metadata['priority'] = intval( $matches[1] );
-			error_log( 'MC Functionality: Found Priority: ' . $matches[1] );
-		} elseif ( preg_match( '/priority:\s*(\d+)/', $content, $matches ) ) {
-			$metadata['priority'] = intval( $matches[1] );
-			error_log( 'MC Functionality: Found priority: ' . $matches[1] );
-		} else {
-			error_log( 'MC Functionality: No Priority found, using default: 10' );
-		}
-		
-		// Debug logging
-		error_log( 'MC Functionality: Final parsed metadata - Run Context: ' . $metadata['run_context'] . ', Priority: ' . $metadata['priority'] );
-		
-		return $metadata;
-	}
-
-	/**
-	 * Generate metadata comment block.
-	 *
-	 * @since    1.0.0
-	 * @param    string $run_context The run context value.
-	 * @param    int    $priority    The priority value.
-	 * @return   string The formatted comment block.
-	 */
-	private function generate_metadata_comment( $run_context, $priority ) {
-		$comment = "/**\n";
-		$comment .= " * Run-Context: " . esc_html( $run_context ) . "\n";
-		$comment .= " * Priority: " . intval( $priority ) . "\n";
-		$comment .= " */\n";
-		return $comment;
+		require_once plugin_dir_path( dirname( __FILE__ ) ) . 'includes/class-mc-functionality-snippet-meta.php';
+		return Mc_Functionality_Snippet_Meta::parse( $content );
 	}
 
 	/**
@@ -1066,23 +979,8 @@ class Mc_Functionality_Admin {
 	 * @return   string The updated content with metadata.
 	 */
 	private function update_snippet_metadata( $content, $run_context, $priority ) {
-		// Generate new metadata comment
-		$metadata_comment = $this->generate_metadata_comment( $run_context, $priority );
-		
-		// Check if content already has our metadata format
-		if ( preg_match( '/\/\*\*\s*\n\s*\* Run-Context: [^\n]*\n\s*\* Priority: [^\n]*\n\s*\*\/\s*\n/', $content ) ) {
-			// Replace existing metadata with new metadata
-			$content = preg_replace( '/\/\*\*\s*\n\s*\* Run-Context: [^\n]*\n\s*\* Priority: [^\n]*\n\s*\*\/\s*\n/', $metadata_comment, $content );
-		} else {
-			// Add metadata at the top of the file (after <?php if it exists)
-			if ( strpos( $content, '<?php' ) === 0 ) {
-				$content = '<?php' . "\n" . $metadata_comment . substr( $content, 5 );
-			} else {
-				$content = $metadata_comment . $content;
-			}
-		}
-		
-		return $content;
+		require_once plugin_dir_path( dirname( __FILE__ ) ) . 'includes/class-mc-functionality-snippet-meta.php';
+		return Mc_Functionality_Snippet_Meta::update( $content, $run_context, $priority );
 	}
 
 }

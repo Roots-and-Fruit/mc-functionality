@@ -123,7 +123,9 @@ class Mc_Functionality {
 		/**
 		 * The class responsible for defining all actions that occur in the admin area.
 		 */
-		require_once plugin_dir_path( dirname( __FILE__ ) ) . 'admin/class-mc-functionality-admin.php';
+		if ( is_admin() ) {
+			require_once plugin_dir_path( dirname( __FILE__ ) ) . 'admin/class-mc-functionality-admin.php';
+		}
 
 		/**
 		 * The class responsible for defining all actions that occur in the public-facing
@@ -160,6 +162,9 @@ class Mc_Functionality {
 	 * @access   private
 	 */
 	private function define_admin_hooks() {
+		if ( ! is_admin() || ! class_exists( 'Mc_Functionality_Admin' ) ) {
+			return;
+		}
 
 		$this->plugin_admin = new Mc_Functionality_Admin( $this->get_plugin_name(), $this->get_version() );
 
@@ -183,8 +188,7 @@ class Mc_Functionality {
 
 		$plugin_public = new Mc_Functionality_Public( $this->get_plugin_name(), $this->get_version() );
 
-		$this->loader->add_action( 'wp_enqueue_scripts', $plugin_public, 'enqueue_styles' );
-		$this->loader->add_action( 'wp_enqueue_scripts', $plugin_public, 'enqueue_scripts' );
+		unset( $plugin_public );
 
 	}
 

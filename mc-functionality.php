@@ -16,7 +16,7 @@
  * Plugin Name:       MC Functionality
  * Plugin URI:        https://www.mattcromwell.com/mc-functionality
  * Description:       A file-based code snippet system for WordPress. Load and execute PHP files from the /code-snippets/ directory with better performance and security than database-stored snippets.
- * Version:           1.0.0
+ * Version:           1.1.0
  * Author:            Matt Cromwell
  * Author URI:        https://www.mattcromwell.com/
  * License:           GPL-2.0+
@@ -35,24 +35,43 @@ if ( ! defined( 'WPINC' ) ) {
  * Start at version 1.0.0 and use SemVer - https://semver.org
  * Rename this for your plugin and update it as you release new versions.
  */
-define( 'MC_FUNCTIONALITY_VERSION', '1.0.0' );
+define( 'MC_FUNCTIONALITY_VERSION', '1.1.0' );
 
 /**
  * Plugin snippets directory path.
  * This is where PHP code snippets are stored and loaded from.
  */
-define( 'MC_FUNCTIONALITY_SNIPPETS_DIR', plugin_dir_path( __FILE__ ) . 'code-snippets' );
+if ( ! defined( 'MC_FUNCTIONALITY_SNIPPETS_DIR' ) ) {
+	define( 'MC_FUNCTIONALITY_SNIPPETS_DIR', WP_CONTENT_DIR . '/mc-snippets' );
+}
+
+/**
+ * Legacy folder. Another process may still add files here. Copy them forward. Do not delete them.
+ *
+ * @return string
+ */
+function mc_functionality_legacy_snippets_dir() {
+	return plugin_dir_path( __FILE__ ) . 'code-snippets';
+}
 
 /**
  * Load code snippets early in the WordPress lifecycle.
  * This ensures snippets are available before other plugins and themes load.
  */
 function load_mc_functionality_snippets() {
-	// Load the snippet loader class
+	require_once plugin_dir_path( __FILE__ ) . 'includes/class-mc-functionality-snippet-store.php';
+	require_once plugin_dir_path( __FILE__ ) . 'includes/class-mc-functionality-snippet-migration.php';
 	require_once plugin_dir_path( __FILE__ ) . 'includes/class-mc-functionality-snippet-loader.php';
-	
-	// Initialize and load snippets
+
+	$store = new Mc_Functionality_Snippet_Store();
+	$store->ensure_dir();
+	$store->ensure_key();
+	Mc_Functionality_Snippet_Migration::copy_once( mc_functionality_legacy_snippets_dir(), $store->get_dir() );
+
 	$snippet_loader = new Mc_Functionality_Snippet_Loader();
+	if ( isset( $_GET['mc-snippets-safe-mode'] ) ) {
+		$snippet_loader->store()->maybe_disable( wp_unslash( $_GET['mc-snippets-safe-mode'] ) );
+	}
 	$snippet_loader->load_snippets();
 }
 
@@ -99,6 +118,5 @@ function run_mc_functionality() {
 
 	$plugin = new Mc_Functionality();
 	$plugin->run();
-
 }
 run_mc_functionality();

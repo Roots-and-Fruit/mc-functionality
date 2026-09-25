@@ -30,7 +30,13 @@ class Mc_Functionality_Activator {
 	 * @since    1.0.0
 	 */
 	public static function activate() {
-
+		require_once plugin_dir_path( dirname( __FILE__ ) ) . 'includes/class-mc-functionality-snippet-store.php';
+		require_once plugin_dir_path( dirname( __FILE__ ) ) . 'includes/class-mc-functionality-snippet-migration.php';
+		$store = new Mc_Functionality_Snippet_Store();
+		$store->ensure_dir();
+		if ( function_exists( 'mc_functionality_legacy_snippets_dir' ) ) {
+			Mc_Functionality_Snippet_Migration::copy_once( mc_functionality_legacy_snippets_dir(), $store->get_dir() );
+		}
 	}
 
 }

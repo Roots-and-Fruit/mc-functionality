@@ -30,8 +30,9 @@
     margin-bottom: 30px;
     padding: 20px;
     background: #fff;
-    border: 1px solid #ccd0d4;
-    border-radius: 4px;
+    border: 0;
+    border-radius: 0.75rem;
+    box-shadow: 0 2px 12px rgba(44, 41, 34, 0.06);
 }
 
 .mc-functionality-overview h2,
@@ -64,8 +65,53 @@
    Snippets List
    ========================================================================== */
 
-.mc-snippets-list table {
-    margin-top: 10px;
+.mc-snippets-list {
+	overflow-x: auto;
+	margin-top: 1rem;
+	border: 0;
+	background: transparent;
+}
+
+.mc-rf-settings table.rf-table {
+	width: 100%;
+	border: 0;
+	border-collapse: collapse;
+	background: transparent;
+	box-shadow: none;
+	font-size: 1rem;
+}
+
+.mc-rf-settings table.rf-table th,
+.mc-rf-settings table.rf-table td {
+	text-align: left;
+	padding: 0.75rem 1rem;
+	border: 0;
+	border-bottom: 1px solid rgba(44, 41, 34, 0.14);
+	vertical-align: middle;
+}
+
+.mc-rf-settings table.rf-table th {
+	font-family: "Knile", Georgia, "Times New Roman", serif;
+	font-weight: 600;
+	color: #2c2922;
+	background: #f3ece2;
+}
+
+.mc-rf-settings table.rf-table td {
+	color: #6b6560;
+}
+
+.mc-rf-settings table.rf-table tr:last-child td {
+	border-bottom: 0;
+}
+
+.mc-rf-settings .mc-edit-snippet {
+	color: #4b5e2e;
+	font-weight: 600;
+}
+
+.mc-snippet-path {
+	overflow-wrap: anywhere;
 }
 
 .mc-snippets-list th {
@@ -77,11 +123,11 @@
 }
 
 .snippet-status.enabled {
-    color: #46b450;
+    color: #4b5e2e;
 }
 
 .snippet-status.disabled {
-    color: #dc3232;
+    color: #ad3a22;
 }
 
 .mc-toggle-snippet {
@@ -103,22 +149,40 @@
     text-decoration: underline;
 }
 
+.mc-snippets-status__header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 1rem;
+	margin-bottom: 1rem;
+}
+
+.mc-rf-settings .mc-snippets-status__header h3,
+.mc-snippets-status__header h3 {
+	margin: 0;
+}
+
 .mc-add-snippet-section {
-    margin-top: 20px;
-    padding-top: 20px;
-    border-top: 1px solid #ddd;
+	margin: 0;
+	padding: 0;
+	border: 0;
 }
 
 .mc-add-snippet-section .button {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
+	display: inline-flex;
+	align-items: center;
+	gap: 0.35rem;
 }
 
+.mc-add-snippet-section .mc-add-snippet__icon,
 .mc-add-snippet-section .dashicons {
-    font-size: 16px;
-    width: 16px;
-    height: 16px;
+	display: block;
+	width: 20px;
+	height: 20px;
+	flex: 0 0 auto;
+	fill: currentColor;
+	font-size: 20px;
+	line-height: 1;
 }
 
 /* ==========================================================================
@@ -527,4 +591,275 @@
 .notice.fade-out {
     opacity: 0;
     transition: opacity 0.5s ease;
+}
+
+/* Roots & Fruit CDS. Tokens from company-docs/brand/css/tokens.css. Layout from the NerdPress Directory settings screen. */
+@font-face {
+	font-family: "Knile";
+	src: url("https://rootsandfruit.com/wp-content/uploads/rnf_assets/fonts/knile-semibold-webfont.woff2") format("woff2");
+	font-weight: 600;
+	font-style: normal;
+	font-display: swap;
+}
+
+@font-face {
+	font-family: "Nunito Sans";
+	src: url("https://rootsandfruit.com/wp-content/uploads/rnf_assets/fonts/nunito-sans-latin-wght-normal.woff2") format("woff2");
+	font-weight: 200 1000;
+	font-style: normal;
+	font-display: swap;
+}
+
+.mc-rf-settings {
+	--rf-cream: #faf6ee;
+	--rf-white: #ffffff;
+	--rf-ink: #2c2922;
+	--rf-ink-deep: #1a1a1a;
+	--rf-ink-muted: #6b6560;
+	--rf-rule: rgba(44, 41, 34, 0.14);
+	--rf-green: #62744d;
+	--rf-green-deep: #4b5e2e;
+	--rf-green-soft: #e4eadc;
+	--rf-orange: #d4844e;
+	--rf-orange-soft: #f0d5c0;
+	--rf-danger: #ad3a22;
+	--rf-danger-bg: #f7e4dc;
+	--rf-font-serif: "Knile", Georgia, "Times New Roman", serif;
+	--rf-font-sans: "Nunito Sans", system-ui, sans-serif;
+	--rf-text-sm: 1rem;
+	--rf-text-md: 1.125rem;
+	--rf-text-xl: 1.75rem;
+	--rf-leading-body: 1.65;
+	--rf-leading-snug: 1.15;
+	--rf-space-2: 0.5rem;
+	--rf-space-3: 0.75rem;
+	--rf-space-4: 1rem;
+	--rf-space-5: 1.5rem;
+	--rf-space-6: 2.25rem;
+	--rf-radius: 0.75rem;
+	--rf-radius-sm: 0.55rem;
+	--rf-content-max: min(100%, calc(52rem + 150px));
+	--rf-measure: 60ch;
+	--rf-shadow: 0 2px 12px rgba(44, 41, 34, 0.06);
+	--mc-menu-gap: 20px;
+	--mc-page-pad: 1.5rem;
+	max-width: none;
+	margin-top: var(--rf-space-5);
+	margin-left: var(--mc-page-pad);
+	color: var(--rf-ink);
+	font-family: var(--rf-font-sans);
+}
+
+.mc-rf-settings__header,
+.mc-rf-settings__body .nav-tab-wrapper,
+.mc-rf-settings__body .mc-functionality-admin-content {
+	max-width: var(--rf-content-max);
+}
+
+.mc-rf-settings__header {
+	margin: 0 0 0;
+	padding: 0.35rem 0 1.25rem;
+	background: transparent;
+}
+
+.mc-rf-settings__title {
+	display: flex;
+	align-items: center;
+	gap: var(--rf-space-3);
+	margin: 0 0 0.75rem;
+	padding: 0;
+	color: var(--rf-ink-deep);
+	font-family: var(--rf-font-serif);
+	font-size: var(--rf-text-xl);
+	font-weight: 600;
+	line-height: var(--rf-leading-snug);
+	letter-spacing: -0.02em;
+}
+
+.mc-rf-settings__mark {
+	display: block;
+	width: 5.5rem;
+	height: auto;
+	flex: 0 0 auto;
+}
+
+.mc-rf-settings__lede {
+	max-width: 46rem;
+	margin: 0;
+	padding: 0;
+	color: var(--rf-ink);
+	font-size: var(--rf-text-md);
+	line-height: var(--rf-leading-body);
+}
+
+.mc-rf-settings__body {
+	background: var(--rf-cream);
+	margin-left: calc(-1 * (var(--mc-menu-gap) + var(--mc-page-pad)));
+	margin-right: -20px;
+	margin-bottom: -65px;
+	padding: 1.5rem 20px 4rem calc(var(--mc-menu-gap) + var(--mc-page-pad));
+	min-height: calc(100vh - 11rem);
+	border-top: 1px solid rgba(44, 41, 34, 0.08);
+	box-shadow: 0 -2px 6px -4px rgba(44, 41, 34, 0.22);
+}
+
+@media (max-width: 782px) {
+	.mc-rf-settings {
+		--mc-menu-gap: 10px;
+	}
+
+	.mc-rf-settings__body {
+		margin-right: -12px;
+		padding-right: 12px;
+	}
+}
+
+.mc-rf-settings .nav-tab-wrapper {
+	display: block;
+	overflow: hidden;
+	margin: 0 0 var(--rf-space-5);
+	padding: 0;
+	border-bottom: 1px solid var(--rf-rule);
+}
+
+.mc-rf-settings .nav-tab-wrapper::after {
+	display: none;
+}
+
+.mc-rf-settings .nav-tab {
+	float: left;
+	margin: 0 var(--rf-space-2) -1px 0;
+	padding: var(--rf-space-3) var(--rf-space-4);
+	border: 0;
+	border-bottom: 2px solid transparent;
+	border-radius: var(--rf-radius-sm) var(--rf-radius-sm) 0 0;
+	background: transparent;
+	color: var(--rf-ink-muted);
+	font-size: var(--rf-text-sm);
+	font-weight: 600;
+	line-height: var(--rf-leading-snug);
+}
+
+.mc-rf-settings .nav-tab:hover,
+.mc-rf-settings .nav-tab:focus {
+	background: var(--rf-green-soft);
+	color: var(--rf-green-deep);
+	border-bottom-color: transparent;
+}
+
+.mc-rf-settings .nav-tab-active,
+.mc-rf-settings .nav-tab-active:hover,
+.mc-rf-settings .nav-tab-active:focus {
+	background: transparent;
+	color: var(--rf-green);
+	border-bottom-color: var(--rf-green);
+}
+
+.mc-rf-settings .form-table {
+	margin-top: 0;
+	background: var(--rf-white);
+	border: 0;
+	border-radius: var(--rf-radius);
+	box-shadow: var(--rf-shadow);
+}
+
+.mc-rf-settings .form-table th,
+.mc-rf-settings .form-table td {
+	padding: var(--rf-space-4) var(--rf-space-5);
+}
+
+.mc-rf-settings .form-table th {
+	color: var(--rf-ink-deep);
+	font-weight: 600;
+}
+
+.mc-rf-settings .form-table td p.description,
+.mc-rf-settings > .mc-functionality-settings > .description,
+.mc-functionality-settings > .mc-environment-info > .description {
+	color: var(--rf-ink-muted);
+	font-size: var(--rf-text-sm);
+	line-height: var(--rf-leading-body);
+}
+
+.mc-rf-settings h3 {
+	margin: var(--rf-space-6) 0 var(--rf-space-3);
+	color: var(--rf-ink-deep);
+	font-family: var(--rf-font-serif);
+	font-size: var(--rf-text-md);
+	font-weight: 600;
+}
+
+.mc-rf-settings select,
+.mc-rf-settings input[type="text"],
+.mc-rf-settings input[type="number"] {
+	border-color: var(--rf-rule);
+	border-radius: var(--rf-radius-sm);
+	color: var(--rf-ink);
+}
+
+.mc-rf-settings select:focus,
+.mc-rf-settings input[type="text"]:focus,
+.mc-rf-settings input[type="number"]:focus {
+	border-color: var(--rf-green);
+	box-shadow: 0 0 0 3px color-mix(in srgb, var(--rf-green) 35%, transparent);
+}
+
+.mc-rf-settings .button-primary,
+.mc-rf-settings .button-primary:hover,
+.mc-rf-settings .button-primary:focus {
+	background: var(--rf-green);
+	border-color: var(--rf-green-deep);
+	color: var(--rf-white);
+	border-radius: var(--rf-radius);
+	box-shadow: none;
+	text-shadow: none;
+}
+
+.mc-rf-settings .button-primary:hover,
+.mc-rf-settings .button-primary:focus {
+	background: var(--rf-green-deep);
+	border-color: var(--rf-green-deep);
+}
+
+.mc-rf-settings .button:not(.button-primary) {
+	border-color: var(--rf-green);
+	border-radius: var(--rf-radius);
+	background: transparent;
+	color: var(--rf-ink);
+	box-shadow: none;
+}
+
+.mc-rf-settings .button:not(.button-primary):hover,
+.mc-rf-settings .button:not(.button-primary):focus {
+	background: var(--rf-green-soft);
+	border-color: var(--rf-green);
+	color: var(--rf-ink);
+}
+
+.mc-rf-settings .notice {
+	border-radius: var(--rf-radius);
+	box-shadow: none;
+}
+
+.mc-rf-settings .notice-warning {
+	border-left-color: var(--rf-orange);
+	background: var(--rf-orange-soft);
+}
+
+.mc-rf-settings__status {
+	display: flex;
+	align-items: center;
+	gap: var(--rf-space-2);
+}
+
+.mc-rf-settings__status--ok .dashicons {
+	color: var(--rf-green-deep);
+}
+
+.mc-rf-settings__status--warn .dashicons {
+	color: var(--rf-orange);
+}
+
+.mc-environment-info {
+	margin-top: var(--rf-space-6);
 }

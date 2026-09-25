@@ -29,3 +29,15 @@
 if ( ! defined( 'WP_UNINSTALL_PLUGIN' ) ) {
 	exit;
 }
+
+/**
+ * Uninstall must leave snippet files and an active mu-plugin in place.
+ *
+ * @param string $storage_dir Storage directory.
+ * @param string $mu_file     mu-plugin bootstrap.
+ * @return bool
+ */
+function mc_functionality_uninstall_keep_files( $storage_dir, $mu_file ) {
+	unset( $mu_file );
+	return is_dir( $storage_dir );
+}

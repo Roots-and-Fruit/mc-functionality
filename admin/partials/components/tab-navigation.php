@@ -26,16 +26,16 @@ $current_tab = mc_get_current_tab();
 ?>
 
 <nav class="nav-tab-wrapper">
-	<a href="<?php echo admin_url( 'plugins.php?page=mc-functionality&tab=snippets' ); ?>" 
-	   class="nav-tab <?php echo ( $current_tab === 'snippets' ) ? 'nav-tab-active' : ''; ?>">
+	<a href="<?php echo esc_url( admin_url( 'plugins.php?page=mc-functionality&tab=snippets' ) ); ?>"
+	   class="nav-tab <?php echo ( 'snippets' === $current_tab ) ? 'nav-tab-active' : ''; ?>">
 		Snippets
 	</a>
-	<a href="<?php echo admin_url( 'plugins.php?page=mc-functionality&tab=overview' ); ?>" 
-	   class="nav-tab <?php echo ( $current_tab === 'overview' ) ? 'nav-tab-active' : ''; ?>">
+	<a href="<?php echo esc_url( admin_url( 'plugins.php?page=mc-functionality&tab=overview' ) ); ?>"
+	   class="nav-tab <?php echo ( 'overview' === $current_tab ) ? 'nav-tab-active' : ''; ?>">
 		Overview
 	</a>
-	<a href="<?php echo admin_url( 'plugins.php?page=mc-functionality&tab=settings' ); ?>" 
-	   class="nav-tab <?php echo ( $current_tab === 'settings' ) ? 'nav-tab-active' : ''; ?>">
+	<a href="<?php echo esc_url( admin_url( 'plugins.php?page=mc-functionality&tab=settings' ) ); ?>"
+	   class="nav-tab <?php echo ( 'settings' === $current_tab ) ? 'nav-tab-active' : ''; ?>">
 		Settings
 	</a>
 </nav>

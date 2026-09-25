@@ -22,9 +22,16 @@ $snippet_loader = new Mc_Functionality_Snippet_Loader();
 $all_snippets = $snippet_loader->get_all_snippets();
 ?>
 
-<div class="wrap">
-	<h1>Site Functions</h1>
-	
+<div class="wrap mc-rf-settings">
+	<header class="mc-rf-settings__header">
+		<h1 class="mc-rf-settings__title">
+			<img class="mc-rf-settings__mark" src="<?php echo esc_url( plugins_url( 'images/rf-logo.svg', dirname( __FILE__, 2 ) . '/index.php' ) ); ?>" alt="" width="88" height="36" />
+			<?php esc_html_e( 'Site Functions', 'mc-functionality' ); ?>
+		</h1>
+		<p class="mc-rf-settings__lede"><?php esc_html_e( 'Snippets live as files. Turn one off by renaming it, or let a fatal error do that for you.', 'mc-functionality' ); ?></p>
+	</header>
+
+	<div class="mc-rf-settings__body">
 	<?php require_once plugin_dir_path( __FILE__ ) . 'components/tab-navigation.php'; ?>
 
 	<div class="mc-functionality-admin-content">
@@ -48,6 +55,7 @@ $all_snippets = $snippet_loader->get_all_snippets();
 				break;
 		}
 		?>
+	</div>
 	</div>
 </div>
 
