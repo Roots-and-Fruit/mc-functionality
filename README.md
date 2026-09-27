@@ -12,7 +12,7 @@ A **file-based code snippet system** for WordPress that loads and executes PHP f
 
 ### Performance Benefits
 - **File-based storage** - No database queries for snippet loading
-- **Early loading** - Snippets available before themes and plugins
+- **Early loading** - Unconditional PHP runs on `plugins_loaded` at priority 5. Plugin files are already loaded. The theme is not. A snippet can attach to a hook that fires later. It should not call a plugin function, or remove a callback, until that plugin has registered it.
 - **Caching friendly** - Files don't change frequently, perfect for caching
 - **Zero database overhead** - Snippets stored as PHP files
 
