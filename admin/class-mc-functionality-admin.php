@@ -78,49 +78,7 @@ class Mc_Functionality_Admin {
 		// Get all snippets with their status
 		require_once plugin_dir_path( dirname( __FILE__ ) ) . 'includes/class-mc-functionality-snippet-loader.php';
 		$snippet_loader = new Mc_Functionality_Snippet_Loader();
-		
-		// Get all .php files (both enabled and disabled)
-		$all_snippets = array();
-		$snippets_dir = MC_FUNCTIONALITY_SNIPPETS_DIR;
-		
-		if ( is_dir( $snippets_dir ) ) {
-			$php_files = glob( $snippets_dir . '/*.php' );
-			$disabled_files = glob( $snippets_dir . '/*.php.disabled' );
-			
-			// Process enabled files
-			foreach ( $php_files as $file_path ) {
-				$filename = basename( $file_path );
-				
-				// Skip index.php (security file, not a snippet)
-				if ( $filename === 'index.php' ) {
-					continue;
-				}
-				
-				$all_snippets[] = array(
-					'filename' => $filename,
-					'path' => $file_path,
-					'enabled' => true,
-					'status' => 'enabled'
-				);
-			}
-			
-			// Process disabled files
-			foreach ( $disabled_files as $file_path ) {
-				$filename = str_replace( '.disabled', '', basename( $file_path ) );
-				
-				// Skip index.php (security file, not a snippet)
-				if ( $filename === 'index.php' ) {
-					continue;
-				}
-				
-				$all_snippets[] = array(
-					'filename' => $filename,
-					'path' => str_replace( '.disabled', '', $file_path ),
-					'enabled' => false,
-					'status' => 'disabled'
-				);
-			}
-		}
+		$all_snippets   = $snippet_loader->store()->all_snippets();
 		
 		include plugin_dir_path( __FILE__ ) . 'partials/mc-functionality-admin-display.php';
 	}
@@ -170,11 +128,6 @@ class Mc_Functionality_Admin {
 	 * @return   true|WP_Error    True if valid, WP_Error if syntax error.
 	 */
 	private function validate_snippet_content( $content ) {
-		require_once plugin_dir_path( dirname( __FILE__ ) ) . 'includes/class-mc-functionality-snippet-meta.php';
-		$meta = Mc_Functionality_Snippet_Meta::parse( $content );
-		if ( 'css' === $meta['type'] || 'js' === $meta['type'] ) {
-			return true;
-		}
 		$memory_validation = $this->validate_memory_usage( $content );
 		if ( is_wp_error( $memory_validation ) ) {
 			return $memory_validation;
@@ -628,41 +581,15 @@ class Mc_Functionality_Admin {
 		}
 
 		$filename = sanitize_text_field( $_POST['filename'] );
-		
-		// Check if this is a disabled file
-		$is_disabled = false;
-		$base_filename = $filename;
-		
-		if ( strpos( $filename, '.disabled' ) !== false ) {
-			$is_disabled = true;
-			$base_filename = str_replace( '.disabled', '', $filename );
-		}
-		
-		// Validate filename (allow both .php and .php.disabled)
-		if ( empty( $filename ) || ! preg_match( '/^[a-zA-Z0-9\-_\.]+\.php(\.disabled)?$/', $filename ) ) {
-			wp_send_json_error( 'Invalid filename' );
-		}
-
-		$file_path = MC_FUNCTIONALITY_SNIPPETS_DIR . '/' . $filename;
-
-		// Security check: ensure file is within snippets directory
-		$real_file_path = realpath( $file_path );
-		$real_snippets_dir = realpath( MC_FUNCTIONALITY_SNIPPETS_DIR );
-		
-		if ( $real_file_path === false || $real_snippets_dir === false || strpos( $real_file_path, $real_snippets_dir ) !== 0 ) {
+		require_once plugin_dir_path( dirname( __FILE__ ) ) . 'includes/class-mc-functionality-snippet-store.php';
+		$store = new Mc_Functionality_Snippet_Store();
+		$read  = $store->read( $filename );
+		if ( is_wp_error( $read ) ) {
 			wp_send_json_error( 'File not found or access denied' );
 		}
-
-		// Check if file exists and is readable
-		if ( ! file_exists( $file_path ) || ! is_readable( $file_path ) ) {
-			wp_send_json_error( 'File not found or not readable' );
-		}
-
-		// Read file content
-		$content = file_get_contents( $file_path );
-		if ( $content === false ) {
-			wp_send_json_error( 'Unable to read file' );
-		}
+		$is_disabled   = 'disabled' === $read['status'];
+		$content       = $read['content'];
+		$filename      = $read['filename'];
 
 		// Parse metadata from content
 		$metadata = $this->parse_snippet_metadata( $content );
@@ -725,14 +652,20 @@ class Mc_Functionality_Admin {
 			wp_send_json_error( 'Invalid priority value' );
 		}
 
-		// Determine file paths
-		$current_file_path = MC_FUNCTIONALITY_SNIPPETS_DIR . '/' . $filename;
-		$enabled_file_path = MC_FUNCTIONALITY_SNIPPETS_DIR . '/' . $base_filename;
-		$disabled_file_path = MC_FUNCTIONALITY_SNIPPETS_DIR . '/' . $base_filename . '.disabled';
+		// Determine file paths. The editor speaks example.php. Disk files are example.mcphp.
+		require_once plugin_dir_path( dirname( __FILE__ ) ) . 'includes/class-mc-functionality-snippet-store.php';
+		$store = new Mc_Functionality_Snippet_Store();
+		$paths = $store->file_paths( $base_filename );
+		if ( is_wp_error( $paths ) ) {
+			wp_send_json_error( 'Invalid filename' );
+		}
+		$current_file_path   = $is_disabled ? $paths['disabled'] : $paths['enabled'];
+		$enabled_file_path   = $paths['enabled'];
+		$disabled_file_path  = $paths['disabled'];
 
 		// Security check: ensure file is within snippets directory
 		$real_file_path = realpath( dirname( $current_file_path ) );
-		$real_snippets_dir = realpath( MC_FUNCTIONALITY_SNIPPETS_DIR );
+		$real_snippets_dir = realpath( $store->get_dir() );
 		
 		if ( $real_file_path === false || $real_snippets_dir === false || strpos( $real_file_path, $real_snippets_dir ) !== 0 ) {
 			wp_send_json_error( 'File not found or access denied' );
@@ -825,10 +758,16 @@ class Mc_Functionality_Admin {
 
 		// Generate filename from name
 		$filename = $this->generate_filename_from_name( $name );
-		
+		require_once plugin_dir_path( dirname( __FILE__ ) ) . 'includes/class-mc-functionality-snippet-store.php';
+		$store = new Mc_Functionality_Snippet_Store();
+		$paths = $store->file_paths( $filename );
+		if ( is_wp_error( $paths ) ) {
+			wp_send_json_error( 'Invalid filename' );
+		}
+
 		// Check if file already exists (both enabled and disabled versions)
-		$enabled_path = MC_FUNCTIONALITY_SNIPPETS_DIR . '/' . $filename;
-		$disabled_path = MC_FUNCTIONALITY_SNIPPETS_DIR . '/' . $filename . '.disabled';
+		$enabled_path  = $paths['enabled'];
+		$disabled_path = $paths['disabled'];
 		
 		if ( file_exists( $enabled_path ) || file_exists( $disabled_path ) ) {
 			wp_send_json_error( 'A snippet with this name already exists' );

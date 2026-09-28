@@ -16,7 +16,7 @@
  * Plugin Name:       MC Functionality
  * Plugin URI:        https://www.mattcromwell.com/mc-functionality
  * Description:       A file-based code snippet system for WordPress. Load and execute PHP files from the /code-snippets/ directory with better performance and security than database-stored snippets.
- * Version:           1.2.0
+ * Version:           1.2.1
  * Author:            Matt Cromwell
  * Author URI:        https://www.mattcromwell.com/
  * License:           GPL-2.0+
@@ -35,14 +35,70 @@ if ( ! defined( 'WPINC' ) ) {
  * Start at version 1.0.0 and use SemVer - https://semver.org
  * Rename this for your plugin and update it as you release new versions.
  */
-define( 'MC_FUNCTIONALITY_VERSION', '1.2.0' );
+define( 'MC_FUNCTIONALITY_VERSION', '1.2.1' );
+
+/**
+ * Whether $path is inside open_basedir. An empty restriction allows every path.
+ *
+ * @param string $path    Absolute path.
+ * @param string $basedir open_basedir value.
+ * @return bool
+ */
+function mc_functionality_path_allowed( $path, $basedir ) {
+	if ( ! is_string( $basedir ) || '' === $basedir ) {
+		return true;
+	}
+	$path = strtolower( str_replace( '\\', '/', $path ) );
+	foreach ( explode( PATH_SEPARATOR, $basedir ) as $allowed ) {
+		$allowed = strtolower( rtrim( str_replace( '\\', '/', $allowed ), '/' ) );
+		if ( '' !== $allowed && ( $path === $allowed || 0 === strpos( $path, $allowed . '/' ) ) ) {
+			return true;
+		}
+	}
+	return false;
+}
+
+/**
+ * Snippet directory outside the web root.
+ *
+ * The hash keeps two sites on the same machine from sharing one folder.
+ * A normal host gets a folder next to WordPress. WordPress Studio blocks
+ * that write, so this falls back to the system temp directory, which the
+ * web server does not publish.
+ *
+ * @return string
+ */
+function mc_functionality_private_snippets_dir() {
+	$root    = strtolower( rtrim( str_replace( '\\', '/', ABSPATH ), '/' ) );
+	$hash    = substr( md5( $root ), 0, 12 );
+	$name    = 'mc-snippets-' . $hash;
+	$sibling = dirname( str_replace( '/', DIRECTORY_SEPARATOR, $root ) ) . DIRECTORY_SEPARATOR . $name;
+	$temp    = rtrim( sys_get_temp_dir(), '/\\' ) . DIRECTORY_SEPARATOR . $name;
+	$basedir = (string) ini_get( 'open_basedir' );
+	if ( ! mc_functionality_path_allowed( $sibling, $basedir ) ) {
+		return $temp;
+	}
+	if ( is_dir( $temp ) && ! is_dir( $sibling ) ) {
+		return $temp;
+	}
+	return $sibling;
+}
 
 /**
  * Plugin snippets directory path.
  * This is where PHP code snippets are stored and loaded from.
  */
 if ( ! defined( 'MC_FUNCTIONALITY_SNIPPETS_DIR' ) ) {
-	define( 'MC_FUNCTIONALITY_SNIPPETS_DIR', WP_CONTENT_DIR . '/mc-snippets' );
+	define( 'MC_FUNCTIONALITY_SNIPPETS_DIR', mc_functionality_private_snippets_dir() );
+}
+
+/**
+ * Old public folder. Files here are moved out and then deleted.
+ *
+ * @return string
+ */
+function mc_functionality_public_snippets_dir() {
+	return WP_CONTENT_DIR . '/mc-snippets';
 }
 
 /**
@@ -64,6 +120,7 @@ function load_mc_functionality_snippets() {
 	require_once plugin_dir_path( __FILE__ ) . 'includes/class-mc-functionality-snippet-loader.php';
 
 	$store = new Mc_Functionality_Snippet_Store();
+	Mc_Functionality_Snippet_Migration::relocate_public_snippets( mc_functionality_public_snippets_dir(), $store->get_dir() );
 	$store->ensure_dir();
 	$store->ensure_key();
 	Mc_Functionality_Snippet_Migration::copy_once( mc_functionality_legacy_snippets_dir(), $store->get_dir() );

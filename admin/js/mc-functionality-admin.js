@@ -13,14 +13,17 @@
 
 		// WordPress Notice System
 		function showWordPressNotice(message, type = 'success') {
-			// Create unique ID for the notice
+			var allowed = { success: true, error: true, warning: true, info: true };
+			if ( ! allowed[ type ] ) {
+				type = 'success';
+			}
 			var noticeId = 'mc-notice-' + Date.now();
-			
-			// Create notice HTML using WP core classes
-			var noticeHtml = '<div id="' + noticeId + '" class="notice notice-' + type + ' is-dismissible"><p>' + message + '</p></div>';
-			
-			// Insert at top of admin page (after .wrap)
-			$('.wrap').first().prepend(noticeHtml);
+			var $notice = $( '<div>', {
+				id: noticeId,
+				'class': 'notice is-dismissible notice-' + type
+			} );
+			$notice.append( $( '<p>' ).text( null == message ? '' : String( message ) ) );
+			$( '.wrap' ).first().prepend( $notice );
 			
 			// Auto-dismiss after 5 seconds
 			setTimeout(function() {

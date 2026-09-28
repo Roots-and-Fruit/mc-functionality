@@ -1,6 +1,6 @@
 # MC Functionality
 
-[![WordPress Plugin Version](https://img.shields.io/badge/WordPress%20Plugin-1.2.0-blue.svg)](https://github.com/Roots-and-Fruit/mc-functionality)
+[![WordPress Plugin Version](https://img.shields.io/badge/WordPress%20Plugin-1.2.1-blue.svg)](https://github.com/Roots-and-Fruit/mc-functionality)
 [![PHP Version](https://img.shields.io/badge/PHP-7.4+-green.svg)](https://php.net/)
 [![WordPress Version](https://img.shields.io/badge/WordPress-5.0+-green.svg)](https://wordpress.org/)
 [![License](https://img.shields.io/badge/License-GPL%20v2%2B-orange.svg)](https://www.gnu.org/licenses/gpl-2.0.html)
@@ -61,7 +61,9 @@ add_action( 'wp_footer', function() {
 
 ### File-Based Snippets
 
-Place PHP files in `wp-content/mc-snippets/`. That folder sits outside the plugin, so an update does not remove your snippets. Point `MC_FUNCTIONALITY_SNIPPETS_DIR` at another directory if you want them somewhere else.
+Snippet files are stored outside the web root, in a folder named `mc-snippets-` plus a short hash of the site path. On a normal host that folder sits next to the WordPress directory. WordPress Studio does not allow PHP to write there, so on Studio the folder is in the system temp directory. Set `MC_FUNCTIONALITY_SNIPPETS_DIR` if you want a permanent path PHP is allowed to use. On disk the bodies use the `.mcphp` extension, so a direct web request does not run them. The editor and the Abilities API still call a snippet `example.php`.
+
+After you update to 1.2.1, open `https://yoursite.example/wp-content/mc-snippets/safe-mode.key` in a private window. You want a 404. The old key is deleted during the move. A new key is written in the private folder. If that URL still downloads a file, load any WordPress page once and check the folder again.
 
 On WordPress 6.9 or newer, the same files are available through the Abilities API: list, read, create, update, enable, disable, and delete. Administrators receive `read_mc_snippets`, `edit_mc_snippets`, and `delete_mc_snippets` on upgrade. A new file is saved disabled until it is enabled.
 

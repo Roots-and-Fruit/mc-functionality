@@ -87,7 +87,7 @@ class Mc_Functionality_Snippet_Zip {
 		}
 		for ( $i = 0; $i < $zip->numFiles; $i++ ) { // phpcs:ignore WordPress.NamingConventions.ValidVariableName.UsedPropertyNotSnakeCase
 			$stat = $zip->statIndex( $i );
-			$name = basename( (string) $stat['name'] );
+			$name   = Mc_Functionality_Snippet_Store::storage_basename( basename( (string) $stat['name'] ) );
 			$target = rtrim( $dir, '/\\' ) . '/' . $name;
 			if ( is_file( $target ) && ! $confirm ) {
 				continue;
@@ -128,6 +128,6 @@ class Mc_Functionality_Snippet_Zip {
 		if ( 'safe-mode.key' === $name || 'snippets-disabled' === $name ) {
 			return false;
 		}
-		return 1 === preg_match( '/^[a-zA-Z0-9\-_\.]+\.(php|css|js)(\.disabled|\.error)?$/', $name );
+		return 1 === preg_match( '/^[a-zA-Z0-9\-_\.]+\.(php|mcphp|css|js)(\.disabled|\.error)?$/', $name );
 	}
 }

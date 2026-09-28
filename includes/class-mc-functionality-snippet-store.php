@@ -190,7 +190,7 @@ class Mc_Functionality_Snippet_Store {
 		if ( ! is_dir( $this->dir ) ) {
 			return array();
 		}
-		$paths = glob( $this->dir . '/*.php' );
+		$paths = glob( $this->dir . '/*.mcphp' );
 		if ( ! is_array( $paths ) ) {
 			return array();
 		}
@@ -215,7 +215,7 @@ class Mc_Functionality_Snippet_Store {
 		if ( ! is_file( $path ) || ! is_readable( $path ) ) {
 			return false;
 		}
-		if ( 'php' !== pathinfo( $path, PATHINFO_EXTENSION ) ) {
+		if ( 'mcphp' !== pathinfo( $path, PATHINFO_EXTENSION ) ) {
 			return false;
 		}
 		if ( is_file( $path . '.disabled' ) ) {
@@ -229,11 +229,11 @@ class Mc_Functionality_Snippet_Store {
 	 * @return bool
 	 */
 	public function is_enabled( $filename ) {
-		if ( ! $this->is_safe_filename( $filename ) || substr( $filename, -10 ) === '.disabled' ) {
+		$paths = $this->file_paths( $filename );
+		if ( is_wp_error( $paths ) ) {
 			return false;
 		}
-		$path = $this->dir . '/' . $filename;
-		return $this->is_loadable_php( $path );
+		return $this->is_loadable_php( $paths['enabled'] );
 	}
 
 	/**
@@ -241,19 +241,17 @@ class Mc_Functionality_Snippet_Store {
 	 * @return bool
 	 */
 	public function enable( $filename ) {
-		if ( ! $this->is_safe_filename( $filename ) ) {
+		$paths = $this->file_paths( $filename );
+		if ( is_wp_error( $paths ) ) {
 			return false;
 		}
-		$filename = preg_replace( '/\.disabled$/', '', $filename );
-		$path     = $this->dir . '/' . $filename;
-		$disabled = $path . '.disabled';
-		if ( ! is_file( $disabled ) ) {
-			return is_file( $path );
+		if ( ! is_file( $paths['disabled'] ) ) {
+			return is_file( $paths['enabled'] );
 		}
-		if ( ! $this->is_inside( $disabled ) ) {
+		if ( ! $this->is_inside( $paths['disabled'] ) ) {
 			return false;
 		}
-		return rename( $disabled, $path );
+		return rename( $paths['disabled'], $paths['enabled'] );
 	}
 
 	/**
@@ -261,19 +259,17 @@ class Mc_Functionality_Snippet_Store {
 	 * @return bool
 	 */
 	public function disable( $filename ) {
-		$filename = preg_replace( '/\.disabled$/', '', (string) $filename );
-		if ( ! $this->is_safe_filename( $filename ) ) {
+		$paths = $this->file_paths( $filename );
+		if ( is_wp_error( $paths ) ) {
 			return false;
 		}
-		$path     = $this->dir . '/' . $filename;
-		$disabled = $path . '.disabled';
-		if ( is_file( $disabled ) ) {
+		if ( is_file( $paths['disabled'] ) ) {
 			return true;
 		}
-		if ( ! $this->is_loadable_php( $path ) ) {
+		if ( ! $this->is_loadable_php( $paths['enabled'] ) ) {
 			return false;
 		}
-		return rename( $path, $disabled );
+		return rename( $paths['enabled'], $paths['disabled'] );
 	}
 
 	/**
@@ -288,7 +284,7 @@ class Mc_Functionality_Snippet_Store {
 		if ( ! $this->is_inside( $path ) || ! is_file( $path ) ) {
 			return false;
 		}
-		if ( 'php' !== pathinfo( $path, PATHINFO_EXTENSION ) ) {
+		if ( 'mcphp' !== pathinfo( $path, PATHINFO_EXTENSION ) ) {
 			return false;
 		}
 		$note = $path . '.error';
@@ -310,27 +306,27 @@ class Mc_Functionality_Snippet_Store {
 			return array();
 		}
 		$snippets = array();
-		$php      = glob( $this->dir . '/*.php' );
+		$php      = glob( $this->dir . '/*.mcphp' );
 		if ( is_array( $php ) ) {
 			foreach ( $php as $path ) {
 				if ( ! $this->is_loadable_php( $path ) ) {
 					continue;
 				}
 				$snippets[] = array(
-					'filename' => basename( $path ),
+					'filename' => self::logical_basename( basename( $path ) ),
 					'path'     => $path,
 					'enabled'  => true,
 					'status'   => 'enabled',
 				);
 			}
 		}
-		$disabled = glob( $this->dir . '/*.php.disabled' );
+		$disabled = glob( $this->dir . '/*.mcphp.disabled' );
 		if ( is_array( $disabled ) ) {
 			foreach ( $disabled as $path ) {
 				if ( ! $this->is_inside( $path ) ) {
 					continue;
 				}
-				$name = basename( $path, '.disabled' );
+				$name = self::logical_basename( basename( $path, '.disabled' ) );
 				if ( 'index.php' === $name ) {
 					continue;
 				}
@@ -433,8 +429,9 @@ class Mc_Functionality_Snippet_Store {
 		if ( ! $this->ensure_dir() ) {
 			return new WP_Error( 'mc_functionality_not_initialized', 'Snippet directory is not available.' );
 		}
-		$enabled  = $this->dir . '/' . $filename;
-		$disabled = $enabled . '.disabled';
+		$paths    = $this->file_paths( $filename );
+		$enabled  = $paths['enabled'];
+		$disabled = $paths['disabled'];
 		if ( is_file( $enabled ) || is_file( $disabled ) ) {
 			return new WP_Error( 'mc_functionality_invalid_filename', 'A snippet with this filename already exists.' );
 		}
@@ -471,7 +468,7 @@ class Mc_Functionality_Snippet_Store {
 		if ( $this->is_enabled( $filename ) ) {
 			return new WP_Error( 'mc_functionality_invalid_status', 'Disable the snippet before updating it.' );
 		}
-		$disabled = $this->dir . '/' . $filename . '.disabled';
+		$disabled = $this->file_paths( $filename )['disabled'];
 		if ( ! is_file( $disabled ) || ! $this->is_inside( $disabled ) ) {
 			return new WP_Error( 'mc_functionality_invalid_filename', 'Snippet file was not found.' );
 		}
@@ -500,10 +497,11 @@ class Mc_Functionality_Snippet_Store {
 		if ( is_wp_error( $filename ) ) {
 			return $filename;
 		}
+		$located = $this->file_paths( $filename );
 		$paths   = array(
-			$this->dir . '/' . $filename,
-			$this->dir . '/' . $filename . '.disabled',
-			$this->dir . '/' . $filename . '.error',
+			$located['enabled'],
+			$located['disabled'],
+			$located['error'],
 		);
 		$removed = false;
 		foreach ( $paths as $path ) {
@@ -528,6 +526,68 @@ class Mc_Functionality_Snippet_Store {
 	}
 
 	/**
+	 * Map a logical snippet name onto the private file names.
+	 *
+	 * Callers still say example.php. The file on disk is example.mcphp so a
+	 * direct web request does not execute it.
+	 *
+	 * @since 1.2.1
+	 * @param string $filename Logical or disabled file name.
+	 * @return array{logical: string, disk: string, enabled: string, disabled: string, error: string}|WP_Error
+	 */
+	public function file_paths( $filename ) {
+		$logical = $this->normalize_php_name( $filename );
+		if ( is_object( $logical ) ) {
+			return $logical;
+		}
+		$disk    = self::storage_basename( $logical );
+		$enabled = $this->dir . '/' . $disk;
+		return array(
+			'logical'  => $logical,
+			'disk'     => $disk,
+			'enabled'  => $enabled,
+			'disabled' => $enabled . '.disabled',
+			'error'    => $enabled . '.error',
+		);
+	}
+
+	/**
+	 * example.php becomes example.mcphp. Other names stay put.
+	 *
+	 * @since 1.2.1
+	 * @param string $name Basename.
+	 * @return string
+	 */
+	public static function storage_basename( $name ) {
+		$suffix = '';
+		if ( '.disabled' === substr( $name, -9 ) ) {
+			$name   = substr( $name, 0, -9 );
+			$suffix = '.disabled';
+		} elseif ( '.error' === substr( $name, -6 ) ) {
+			$name   = substr( $name, 0, -6 );
+			$suffix = '.error';
+		}
+		if ( 'index.php' !== $name && '.php' === substr( $name, -4 ) && '.mcphp' !== substr( $name, -6 ) ) {
+			$name = substr( $name, 0, -4 ) . '.mcphp';
+		}
+		return $name . $suffix;
+	}
+
+	/**
+	 * example.mcphp becomes example.php for the editor and abilities.
+	 *
+	 * @since 1.2.1
+	 * @param string $name Disk basename without a .disabled suffix.
+	 * @return string
+	 */
+	public static function logical_basename( $name ) {
+		if ( '.mcphp' === substr( $name, -6 ) ) {
+			return substr( $name, 0, -6 ) . '.php';
+		}
+		return $name;
+	}
+
+	/**
 	 * Basename ending in .php, or an error when the name can leave the directory.
 	 *
 	 * @since 1.2.0
@@ -544,6 +604,9 @@ class Mc_Functionality_Snippet_Store {
 		}
 		if ( '.disabled' === substr( $filename, -9 ) ) {
 			$filename = substr( $filename, 0, -9 );
+		}
+		if ( '.mcphp' === substr( $filename, -6 ) ) {
+			$filename = substr( $filename, 0, -6 ) . '.php';
 		}
 		if ( '.php' !== substr( $filename, -4 ) ) {
 			$filename .= '.php';
@@ -562,8 +625,9 @@ class Mc_Functionality_Snippet_Store {
 	 * @return string|WP_Error
 	 */
 	private function existing_path( $filename ) {
-		$enabled  = $this->dir . '/' . $filename;
-		$disabled = $enabled . '.disabled';
+		$located  = $this->file_paths( $filename );
+		$enabled  = $located['enabled'];
+		$disabled = $located['disabled'];
 		if ( is_file( $disabled ) && $this->is_inside( $disabled ) ) {
 			return $disabled;
 		}

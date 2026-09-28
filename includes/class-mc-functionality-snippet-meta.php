@@ -182,14 +182,77 @@ class Mc_Functionality_Snippet_Meta {
 		if ( ! is_string( $content ) ) {
 			$content = '';
 		}
-		if ( false !== strpos( $content, "defined( 'ABSPATH' )" ) || false !== strpos( $content, 'defined( "ABSPATH" )' ) ) {
+		if ( self::starts_with_abspath_guard( $content ) ) {
 			return $content;
 		}
-		$guard = "if ( ! defined( 'ABSPATH' ) ) {\n\texit;\n}\n";
-		if ( 0 === strpos( $content, '<?php' ) ) {
-			return "<?php\n" . $guard . substr( $content, 5 );
+		$guard   = "if ( ! defined( 'ABSPATH' ) ) {\n\texit;\n}\n";
+		$trimmed = ltrim( $content );
+		if ( 0 === strpos( $trimmed, '<?php' ) ) {
+			$rest = substr( $trimmed, 5 );
+			return "<?php\n" . $guard . ltrim( $rest );
 		}
 		return "<?php\n" . $guard . $content;
+	}
+
+	/**
+	 * The first statement is the direct-access exit, ignoring comments.
+	 *
+	 * @since 1.2.1
+	 * @param string $content File contents.
+	 * @return bool
+	 */
+	private static function starts_with_abspath_guard( $content ) {
+		$code = ltrim( $content );
+		if ( 0 !== strpos( $code, '<?php' ) ) {
+			$code = "<?php\n" . $code;
+		}
+		try {
+			$tokens = token_get_all( $code );
+		} catch ( ParseError $error ) {
+			return false;
+		}
+		$significant = array();
+		foreach ( $tokens as $token ) {
+			if ( is_array( $token ) && in_array( $token[0], array( T_OPEN_TAG, T_WHITESPACE, T_COMMENT, T_DOC_COMMENT ), true ) ) {
+				continue;
+			}
+			$significant[] = $token;
+		}
+		$want = array(
+			array( 'id' => T_IF ),
+			array( 'char' => '(' ),
+			array( 'char' => '!' ),
+			array( 'id' => T_STRING, 'text' => 'defined' ),
+			array( 'char' => '(' ),
+			array( 'id' => T_CONSTANT_ENCAPSED_STRING ),
+			array( 'char' => ')' ),
+			array( 'char' => ')' ),
+		);
+		foreach ( $want as $index => $expected ) {
+			if ( ! isset( $significant[ $index ] ) ) {
+				return false;
+			}
+			$token = $significant[ $index ];
+			if ( isset( $expected['char'] ) ) {
+				if ( $token !== $expected['char'] ) {
+					return false;
+				}
+				continue;
+			}
+			if ( ! is_array( $token ) || $token[0] !== $expected['id'] ) {
+				return false;
+			}
+			if ( isset( $expected['text'] ) && $expected['text'] !== $token[1] ) {
+				return false;
+			}
+			if ( T_CONSTANT_ENCAPSED_STRING === $expected['id'] ) {
+				$literal = trim( $token[1], '\'"' );
+				if ( 'ABSPATH' !== $literal ) {
+					return false;
+				}
+			}
+		}
+		return true;
 	}
 
 	/**

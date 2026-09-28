@@ -43,11 +43,19 @@ class Mc_Functionality_Snippet_Loader {
 	private static $shutdown_registered = false;
 
 	/**
+	 * Directory the shutdown handler is allowed to quarantine.
+	 *
+	 * @var string
+	 */
+	private static $store_dir = '';
+
+	/**
 	 * @param string|null $dir Optional directory. Tests pass a temp dir.
 	 */
 	public function __construct( $dir = null ) {
 		require_once __DIR__ . '/class-mc-functionality-snippet-store.php';
 		$this->store = new Mc_Functionality_Snippet_Store( $dir );
+		self::$store_dir = $this->store->get_dir();
 		$this->register_shutdown();
 	}
 
@@ -95,10 +103,11 @@ class Mc_Functionality_Snippet_Loader {
 		if ( '' === $id ) {
 			return '';
 		}
-		$path = $this->store->get_dir() . '/' . $id . '.php';
-		if ( ! is_file( $path ) ) {
+		$paths = $this->store->file_paths( $id );
+		if ( is_object( $paths ) || ! is_file( $paths['enabled'] ) ) {
 			return '';
 		}
+		$path = $paths['enabled'];
 		$meta = Mc_Functionality_Snippet_Meta::parse( (string) file_get_contents( $path ) );
 		if ( 'content' !== $meta['type'] ) {
 			return '';
@@ -341,13 +350,10 @@ class Mc_Functionality_Snippet_Loader {
 			return;
 		}
 		$path = self::running_snippet();
-		if ( '' === $path && ! empty( $error['file'] ) ) {
-			$path = $error['file'];
-		}
-		if ( '' === $path || ! is_file( $path ) ) {
+		if ( '' === $path || ! is_file( $path ) || '' === self::$store_dir ) {
 			return;
 		}
-		$store = new Mc_Functionality_Snippet_Store( dirname( $path ) );
+		$store = new Mc_Functionality_Snippet_Store( self::$store_dir );
 		if ( ! $store->is_inside( $path ) ) {
 			return;
 		}

@@ -74,7 +74,7 @@ mc_ability_rrmdir( $dir );
 mkdir( $dir, 0755, true );
 file_put_contents( $sentinel, 'original-config' );
 $other = "<?php\necho 'keep';\n";
-file_put_contents( $dir . '/other.php', $other );
+file_put_contents( $dir . '/other.mcphp', $other );
 
 try {
 	mc_ability_assert( function_exists( 'wp_get_ability' ), 'abilities API is available' );
@@ -114,12 +114,12 @@ try {
 	wp_set_current_user( $user_id );
 	$refused = wp_get_ability( 'mc-functionality/create-snippet' )->execute(
 		array(
-			'filename' => 'round.php',
+			'filename' => 'round.mcphp',
 			'content'  => "<?php\necho 'round';\n",
 		)
 	);
 	mc_ability_assert( is_wp_error( $refused ), 'user without the caps cannot create' );
-	mc_ability_assert( ! is_file( $dir . '/round.php' ) && ! is_file( $dir . '/round.php.disabled' ), 'refused create writes nothing' );
+	mc_ability_assert( ! is_file( $dir . '/round.mcphp' ) && ! is_file( $dir . '/round.mcphp.disabled' ), 'refused create writes nothing' );
 
 	$user = new WP_User( $user_id );
 	$user->add_cap( 'read_mc_snippets' );
@@ -148,7 +148,7 @@ try {
 
 	$created = wp_get_ability( 'mc-functionality/create-snippet' )->execute(
 		array(
-			'filename' => 'round.php',
+			'filename' => 'round.mcphp',
 			'content'  => "<?php\n/**\n * Round\n * Run-Context: admin-only\n */\necho 'one';\n",
 		)
 	);
@@ -156,7 +156,7 @@ try {
 		fwrite( STDERR, 'create error: ' . $created->get_error_code() . ' ' . $created->get_error_message() . "\n" );
 	}
 	mc_ability_assert( is_array( $created ) && 'disabled' === $created['status'], 'create returns disabled' );
-	mc_ability_assert( is_file( $dir . '/round.php.disabled' ) && ! is_file( $dir . '/round.php' ), 'create lands on .php.disabled' );
+	mc_ability_assert( is_file( $dir . '/round.mcphp.disabled' ) && ! is_file( $dir . '/round.mcphp' ), 'create lands on .php.disabled' );
 
 	$listed = wp_get_ability( 'mc-functionality/list-snippets' )->execute( array( 'status' => 'disabled' ) );
 	if ( is_wp_error( $listed ) ) {
@@ -173,44 +173,44 @@ try {
 	}
 	mc_ability_assert( $found, 'list includes the disabled snippet without a path' );
 
-	$got = wp_get_ability( 'mc-functionality/get-snippet' )->execute( array( 'filename' => 'round.php' ) );
+	$got = wp_get_ability( 'mc-functionality/get-snippet' )->execute( array( 'filename' => 'round.mcphp' ) );
 	mc_ability_assert( is_array( $got ) && isset( $got['content'] ) && false !== strpos( $got['content'], 'one' ), 'get returns the source' );
 	mc_ability_assert( is_array( $got ) && ! isset( $got['path'] ), 'get does not return a path' );
-	mc_ability_assert( $other === file_get_contents( $dir . '/other.php' ), 'list and get leave the other snippet alone' );
+	mc_ability_assert( $other === file_get_contents( $dir . '/other.mcphp' ), 'list and get leave the other snippet alone' );
 
 	$updated = wp_get_ability( 'mc-functionality/update-snippet' )->execute(
 		array(
-			'filename' => 'round.php',
+			'filename' => 'round.mcphp',
 			'content'  => "<?php\necho 'two';\n",
 		)
 	);
 	mc_ability_assert( is_array( $updated ) && 'disabled' === $updated['status'], 'update rewrites the disabled snippet' );
 
-	file_put_contents( $dir . '/evil.php.disabled', "<?php\neval('echo 1;');\n" );
-	$evil = wp_get_ability( 'mc-functionality/enable-snippet' )->execute( array( 'filename' => 'evil.php' ) );
+	file_put_contents( $dir . '/evil.mcphp.disabled', "<?php\neval('echo 1;');\n" );
+	$evil = wp_get_ability( 'mc-functionality/enable-snippet' )->execute( array( 'filename' => 'evil.mcphp' ) );
 	mc_ability_assert( is_wp_error( $evil ) && 'dangerous_function' === $evil->get_error_code(), 'enable refuses eval' );
-	mc_ability_assert( is_file( $dir . '/evil.php.disabled' ) && ! is_file( $dir . '/evil.php' ), 'refused enable leaves the file disabled' );
+	mc_ability_assert( is_file( $dir . '/evil.mcphp.disabled' ) && ! is_file( $dir . '/evil.mcphp' ), 'refused enable leaves the file disabled' );
 
-	$enabled = wp_get_ability( 'mc-functionality/enable-snippet' )->execute( array( 'filename' => 'round.php' ) );
-	mc_ability_assert( is_array( $enabled ) && 'enabled' === $enabled['status'] && is_file( $dir . '/round.php' ), 'enable renames the file on' );
+	$enabled = wp_get_ability( 'mc-functionality/enable-snippet' )->execute( array( 'filename' => 'round.mcphp' ) );
+	mc_ability_assert( is_array( $enabled ) && 'enabled' === $enabled['status'] && is_file( $dir . '/round.mcphp' ), 'enable renames the file on' );
 
 	$live = wp_get_ability( 'mc-functionality/update-snippet' )->execute(
 		array(
-			'filename' => 'round.php',
+			'filename' => 'round.mcphp',
 			'content'  => "<?php\necho 'three';\n",
 		)
 	);
 	mc_ability_assert( is_wp_error( $live ), 'update refuses an enabled snippet' );
-	mc_ability_assert( false === strpos( file_get_contents( $dir . '/round.php' ), 'three' ), 'refused update leaves the enabled source' );
+	mc_ability_assert( false === strpos( file_get_contents( $dir . '/round.mcphp' ), 'three' ), 'refused update leaves the enabled source' );
 
-	$disabled = wp_get_ability( 'mc-functionality/disable-snippet' )->execute( array( 'filename' => 'round.php' ) );
+	$disabled = wp_get_ability( 'mc-functionality/disable-snippet' )->execute( array( 'filename' => 'round.mcphp' ) );
 	mc_ability_assert( is_array( $disabled ) && 'disabled' === $disabled['status'], 'disable renames the file off' );
 
-	file_put_contents( $dir . '/round.php.error', 'boom on line 1' );
-	$deleted = wp_get_ability( 'mc-functionality/delete-snippet' )->execute( array( 'filename' => 'round.php' ) );
+	file_put_contents( $dir . '/round.mcphp.error', 'boom on line 1' );
+	$deleted = wp_get_ability( 'mc-functionality/delete-snippet' )->execute( array( 'filename' => 'round.mcphp' ) );
 	mc_ability_assert( is_array( $deleted ) && 'deleted' === $deleted['status'], 'delete returns deleted' );
-	mc_ability_assert( ! is_file( $dir . '/round.php' ) && ! is_file( $dir . '/round.php.disabled' ) && ! is_file( $dir . '/round.php.error' ), 'delete removes the snippet and the error note' );
-	mc_ability_assert( $other === file_get_contents( $dir . '/other.php' ), 'other snippet is unchanged after the round trip' );
+	mc_ability_assert( ! is_file( $dir . '/round.mcphp' ) && ! is_file( $dir . '/round.mcphp.disabled' ) && ! is_file( $dir . '/round.mcphp.error' ), 'delete removes the snippet and the error note' );
+	mc_ability_assert( $other === file_get_contents( $dir . '/other.mcphp' ), 'other snippet is unchanged after the round trip' );
 	mc_ability_assert( 'original-config' === file_get_contents( $sentinel ), 'sentinel file is unchanged after the round trip' );
 
 	$abilities = array();

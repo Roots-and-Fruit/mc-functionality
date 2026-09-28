@@ -37,10 +37,10 @@ class Mc_Functionality_Snippet_Migration {
 				continue;
 			}
 			$name = basename( $path );
-			if ( 'index.php' === $name ) {
+			if ( 'index.php' === $name || 'safe-mode.key' === $name || '.htaccess' === $name ) {
 				continue;
 			}
-			$target = rtrim( $dest, '/\\' ) . '/' . $name;
+			$target = rtrim( $dest, '/\\' ) . '/' . Mc_Functionality_Snippet_Store::storage_basename( $name );
 			if ( is_file( $target ) ) {
 				continue;
 			}
@@ -75,10 +75,10 @@ class Mc_Functionality_Snippet_Migration {
 				continue;
 			}
 			$name = basename( $path );
-			if ( 'index.php' === $name ) {
+			if ( 'index.php' === $name || 'safe-mode.key' === $name || '.htaccess' === $name ) {
 				continue;
 			}
-			$target = rtrim( $dest, '/\\' ) . '/' . $name;
+			$target = rtrim( $dest, '/\\' ) . '/' . Mc_Functionality_Snippet_Store::storage_basename( $name );
 			if ( ! is_file( $target ) ) {
 				continue;
 			}
@@ -87,5 +87,84 @@ class Mc_Functionality_Snippet_Migration {
 			}
 		}
 		return $removed;
+	}
+
+	/**
+	 * Move the public wp-content/mc-snippets folder out of the web root.
+	 *
+	 * Copies snippet bodies to .mcphp names, checks the size, then deletes the
+	 * public files. The safe-mode key is not copied.
+	 *
+	 * @since 1.2.1
+	 * @param string $public  Old directory inside the web root.
+	 * @param string $private New directory outside the web root.
+	 * @return bool Whether the public directory is gone or was already absent.
+	 */
+	public static function relocate_public_snippets( $public, $private ) {
+		$public  = rtrim( (string) $public, '/\\' );
+		$private = rtrim( (string) $private, '/\\' );
+		if ( '' === $public || ! is_dir( $public ) ) {
+			return true;
+		}
+		$public_real = realpath( $public );
+		if ( is_dir( $private ) ) {
+			$private_real = realpath( $private );
+			if ( false !== $public_real && false !== $private_real && $public_real === $private_real ) {
+				return false;
+			}
+		} elseif ( ! mkdir( $private, 0755, true ) ) {
+			return false;
+		}
+		$names = scandir( $public );
+		if ( ! is_array( $names ) ) {
+			return false;
+		}
+		$copied = array();
+		foreach ( $names as $name ) {
+			if ( '.' === $name || '..' === $name ) {
+				continue;
+			}
+			$path = $public . '/' . $name;
+			if ( ! is_file( $path ) ) {
+				continue;
+			}
+			if ( in_array( $name, array( 'safe-mode.key', '.htaccess', 'index.php', 'README.md' ), true ) ) {
+				continue;
+			}
+			$target = $private . '/' . Mc_Functionality_Snippet_Store::storage_basename( $name );
+			if ( is_file( $target ) && filesize( $target ) === filesize( $path ) ) {
+				$copied[] = $name;
+				continue;
+			}
+			if ( is_file( $target ) ) {
+				return false;
+			}
+			if ( ! copy( $path, $target ) || ! is_file( $target ) || filesize( $target ) !== filesize( $path ) ) {
+				if ( is_file( $target ) ) {
+					unlink( $target );
+				}
+				return false;
+			}
+			$copied[] = $name;
+		}
+		foreach ( $names as $name ) {
+			if ( '.' === $name || '..' === $name ) {
+				continue;
+			}
+			$path = $public . '/' . $name;
+			if ( ! is_file( $path ) ) {
+				continue;
+			}
+			$drop = in_array( $name, array( 'safe-mode.key', '.htaccess', 'index.php', 'README.md' ), true );
+			if ( ! $drop && ! in_array( $name, $copied, true ) ) {
+				continue;
+			}
+			unlink( $path );
+		}
+		$left = scandir( $public );
+		if ( is_array( $left ) && 2 === count( $left ) ) {
+			rmdir( $public );
+		}
+		return ! is_dir( $public );
 	}
 }
