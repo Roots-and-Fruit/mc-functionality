@@ -113,6 +113,8 @@ class Mc_Functionality {
 		 * core plugin.
 		 */
 		require_once plugin_dir_path( dirname( __FILE__ ) ) . 'includes/class-mc-functionality-loader.php';
+		require_once __DIR__ . '/class-mc-functionality-abilities.php';
+		Mc_Functionality_Abilities::register();
 
 		/**
 		 * The class responsible for defining internationalization functionality

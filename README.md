@@ -1,6 +1,6 @@
 # MC Functionality
 
-[![WordPress Plugin Version](https://img.shields.io/badge/WordPress%20Plugin-1.1.0-blue.svg)](https://github.com/Roots-and-Fruit/mc-functionality)
+[![WordPress Plugin Version](https://img.shields.io/badge/WordPress%20Plugin-1.2.0-blue.svg)](https://github.com/Roots-and-Fruit/mc-functionality)
 [![PHP Version](https://img.shields.io/badge/PHP-7.4+-green.svg)](https://php.net/)
 [![WordPress Version](https://img.shields.io/badge/WordPress-5.0+-green.svg)](https://wordpress.org/)
 [![License](https://img.shields.io/badge/License-GPL%20v2%2B-orange.svg)](https://www.gnu.org/licenses/gpl-2.0.html)
@@ -62,6 +62,8 @@ add_action( 'wp_footer', function() {
 ### File-Based Snippets
 
 Place PHP files in `wp-content/mc-snippets/`. That folder sits outside the plugin, so an update does not remove your snippets. Point `MC_FUNCTIONALITY_SNIPPETS_DIR` at another directory if you want them somewhere else.
+
+On WordPress 6.9 or newer, the same files are available through the Abilities API: list, read, create, update, enable, disable, and delete. Administrators receive `read_mc_snippets`, `edit_mc_snippets`, and `delete_mc_snippets` on upgrade. A new file is saved disabled until it is enabled.
 
 ```
 wp-content/mc-snippets/

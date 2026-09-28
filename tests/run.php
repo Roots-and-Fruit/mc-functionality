@@ -621,6 +621,117 @@ function mc_run_phase7() {
 	fwrite( STDOUT, "phase 7 ok\n" );
 }
 
+/**
+ * @return void
+ */
+function mc_run_phase8() {
+	global $failed;
+
+	if ( ! class_exists( 'WP_Error' ) ) {
+		/**
+		 * Minimal error stub for store tests outside WordPress.
+		 */
+		class WP_Error {
+			/**
+			 * @var string
+			 */
+			private $code;
+
+			/**
+			 * @var string
+			 */
+			private $message;
+
+			/**
+			 * @param string $code    Error code.
+			 * @param string $message Error message.
+			 * @param mixed  $data    Unused data.
+			 */
+			public function __construct( $code = '', $message = '', $data = '' ) {
+				$this->code    = $code;
+				$this->message = $message;
+				unset( $data );
+			}
+
+			/**
+			 * @return string
+			 */
+			public function get_error_code() {
+				return $this->code;
+			}
+		}
+	}
+	if ( ! function_exists( 'is_wp_error' ) ) {
+		/**
+		 * @param mixed $thing Value to test.
+		 * @return bool
+		 */
+		function is_wp_error( $thing ) {
+			return $thing instanceof WP_Error;
+		}
+	}
+
+	$dir = sys_get_temp_dir() . '/mc-functionality-phase8-' . getmypid();
+	mc_rrmdir( $dir );
+	mkdir( $dir, 0755, true );
+	$other = "<?php\necho 'keep';\n";
+	file_put_contents( $dir . '/other.php', $other );
+	$sentinel = sys_get_temp_dir() . '/mc-functionality-phase8-sentinel-' . getmypid() . '.php';
+	file_put_contents( $sentinel, 'original-config' );
+
+	$store  = new Mc_Functionality_Snippet_Store( $dir );
+	$source = "<?php\n/**\n * Round\n * Run-Context: admin-only\n */\necho 'one';\n";
+	$bad    = $store->create( '../wp-config.php', $source );
+	mc_assert( is_wp_error( $bad ), 'traversal filename is refused' );
+	mc_assert( 'original-config' === file_get_contents( $sentinel ), 'sentinel file is unchanged' );
+	mc_assert( $other === file_get_contents( $dir . '/other.php' ), 'other snippet is unchanged after a refused create' );
+
+	$created = $store->create( 'round.php', $source );
+	mc_assert( is_array( $created ) && 'disabled' === $created['status'], 'create returns disabled' );
+	mc_assert( is_file( $dir . '/round.php.disabled' ), 'create writes .php.disabled' );
+	mc_assert( ! is_file( $dir . '/round.php' ), 'create does not enable the file' );
+	mc_assert( false !== strpos( file_get_contents( $dir . '/round.php.disabled' ), "defined( 'ABSPATH' )" ), 'create adds the direct-access guard' );
+
+	$eval = $store->create( 'evil.php', "<?php\neval('echo 1;');\n" );
+	mc_assert( is_wp_error( $eval ), 'eval source is refused' );
+	mc_assert( ! is_file( $dir . '/evil.php' ) && ! is_file( $dir . '/evil.php.disabled' ), 'refused eval writes nothing' );
+
+	$huge = $store->create( 'huge.php', str_repeat( 'a', Mc_Functionality_Snippet_Store::MAX_SOURCE_BYTES + 1 ) );
+	mc_assert( is_wp_error( $huge ), 'oversized source is refused' );
+	mc_assert( ! is_file( $dir . '/huge.php.disabled' ), 'refused oversized write leaves no file' );
+
+	$updated = $store->update( 'round.php', "<?php\n/**\n * Round\n * Run-Context: frontend-only\n */\necho 'two';\n" );
+	mc_assert( is_array( $updated ) && 'disabled' === $updated['status'], 'update rewrites a disabled snippet' );
+	mc_assert( false !== strpos( file_get_contents( $dir . '/round.php.disabled' ), 'two' ), 'updated source is on disk' );
+
+	mc_assert( true === $store->enable( 'round.php' ), 'enable renames the file on' );
+	mc_assert( is_file( $dir . '/round.php' ), 'enabled file is round.php' );
+	$blocked = $store->update( 'round.php', "<?php\necho 'three';\n" );
+	mc_assert( is_wp_error( $blocked ), 'update refuses an enabled snippet' );
+	mc_assert( false === strpos( file_get_contents( $dir . '/round.php' ), 'three' ), 'refused update leaves the enabled source' );
+
+	mc_assert( true === $store->disable( 'round.php' ), 'disable renames the file off' );
+	file_put_contents( $dir . '/round.php.error', 'boom on line 1' );
+	$deleted = $store->delete( 'round.php' );
+	mc_assert( is_array( $deleted ) && 'deleted' === $deleted['status'], 'delete returns deleted' );
+	mc_assert( ! is_file( $dir . '/round.php' ) && ! is_file( $dir . '/round.php.disabled' ) && ! is_file( $dir . '/round.php.error' ), 'delete removes the snippet and the error note' );
+	mc_assert( $other === file_get_contents( $dir . '/other.php' ), 'other snippet is unchanged after the round trip' );
+
+	$read = $store->read( 'other.php' );
+	mc_assert( is_array( $read ) && 'other.php' === $read['filename'] && 'enabled' === $read['status'], 'read returns the other snippet' );
+	mc_assert( ! isset( $read['path'] ), 'read does not return a path' );
+
+	mc_rrmdir( $dir );
+	if ( is_file( $sentinel ) ) {
+		unlink( $sentinel );
+	}
+	if ( $failed > 0 ) {
+		fwrite( STDERR, "{$failed} assertion(s) failed\n" );
+		exit( 1 );
+	}
+	fwrite( STDOUT, "phase 8 ok\n" );
+}
+
 if ( '1' === $phase ) {
 	mc_run_phase1();
 } elseif ( '2' === $phase ) {
@@ -635,6 +746,8 @@ if ( '1' === $phase ) {
 	mc_run_phase6();
 } elseif ( '7' === $phase ) {
 	mc_run_phase7();
+} elseif ( '8' === $phase ) {
+	mc_run_phase8();
 } else {
 	fwrite( STDERR, "Unknown phase: {$phase}\n" );
 	exit( 1 );

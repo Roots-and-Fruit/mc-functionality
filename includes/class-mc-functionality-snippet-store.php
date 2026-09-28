@@ -346,6 +346,258 @@ class Mc_Functionality_Snippet_Store {
 	}
 
 	/**
+	 * Snippet rows for the list ability. Paths stay inside this method.
+	 *
+	 * @since 1.2.0
+	 * @param string $status Optional enabled or disabled filter. Empty lists both.
+	 * @return array<int, array<string, string>>|WP_Error
+	 */
+	public function list_rows( $status = '' ) {
+		if ( '' !== $status && ! in_array( $status, array( 'enabled', 'disabled' ), true ) ) {
+			return new WP_Error( 'mc_functionality_invalid_status', 'Status must be enabled or disabled.' );
+		}
+		require_once __DIR__ . '/class-mc-functionality-snippet-meta.php';
+		$rows = array();
+		foreach ( $this->all_snippets() as $snippet ) {
+			if ( '' !== $status && $snippet['status'] !== $status ) {
+				continue;
+			}
+			$content = '';
+			if ( isset( $snippet['path'] ) && is_string( $snippet['path'] ) && is_readable( $snippet['path'] ) ) {
+				$loaded = file_get_contents( $snippet['path'] );
+				if ( is_string( $loaded ) ) {
+					$content = $loaded;
+				}
+			}
+			$meta   = Mc_Functionality_Snippet_Meta::parse( $content );
+			$rows[] = array(
+				'filename'    => (string) $snippet['filename'],
+				'status'      => (string) $snippet['status'],
+				'type'        => isset( $meta['type'] ) ? (string) $meta['type'] : 'php',
+				'run_context' => isset( $meta['run_context'] ) ? (string) $meta['run_context'] : 'everywhere',
+			);
+		}
+		return $rows;
+	}
+
+	/**
+	 * Largest snippet source this store will write, in bytes.
+	 *
+	 * @since 1.2.0
+	 * @var int
+	 */
+	const MAX_SOURCE_BYTES = 262144;
+
+	/**
+	 * Read one snippet's source and parsed header.
+	 *
+	 * @since 1.2.0
+	 * @param string $filename Basename, with or without .php.
+	 * @return array<string, mixed>|WP_Error
+	 */
+	public function read( $filename ) {
+		$filename = $this->normalize_php_name( $filename );
+		if ( is_wp_error( $filename ) ) {
+			return $filename;
+		}
+		$path = $this->existing_path( $filename );
+		if ( is_wp_error( $path ) ) {
+			return $path;
+		}
+		$content = file_get_contents( $path );
+		if ( false === $content ) {
+			return new WP_Error( 'mc_functionality_snippet_data_unavailable', 'Unable to read the snippet file.' );
+		}
+		require_once __DIR__ . '/class-mc-functionality-snippet-meta.php';
+		return array(
+			'filename' => $filename,
+			'status'   => $this->is_enabled( $filename ) ? 'enabled' : 'disabled',
+			'content'  => $content,
+			'header'   => Mc_Functionality_Snippet_Meta::parse( $content ),
+		);
+	}
+
+	/**
+	 * Write a new snippet as a disabled file.
+	 *
+	 * @since 1.2.0
+	 * @param string $filename Basename, with or without .php.
+	 * @param string $content  PHP source.
+	 * @return array{filename: string, status: string}|WP_Error
+	 */
+	public function create( $filename, $content ) {
+		$filename = $this->normalize_php_name( $filename );
+		if ( is_wp_error( $filename ) ) {
+			return $filename;
+		}
+		if ( ! $this->ensure_dir() ) {
+			return new WP_Error( 'mc_functionality_not_initialized', 'Snippet directory is not available.' );
+		}
+		$enabled  = $this->dir . '/' . $filename;
+		$disabled = $enabled . '.disabled';
+		if ( is_file( $enabled ) || is_file( $disabled ) ) {
+			return new WP_Error( 'mc_functionality_invalid_filename', 'A snippet with this filename already exists.' );
+		}
+		$content = $this->prepare_source( $content );
+		if ( is_wp_error( $content ) ) {
+			return $content;
+		}
+		if ( false === file_put_contents( $disabled, $content ) ) {
+			return new WP_Error( 'mc_functionality_snippet_data_unavailable', 'Unable to write the snippet file.' );
+		}
+		if ( ! $this->is_inside( $disabled ) ) {
+			unlink( $disabled );
+			return new WP_Error( 'mc_functionality_invalid_filename', 'Filename must be a single snippet file name.' );
+		}
+		return array(
+			'filename' => $filename,
+			'status'   => 'disabled',
+		);
+	}
+
+	/**
+	 * Replace the source of a disabled snippet.
+	 *
+	 * @since 1.2.0
+	 * @param string $filename Basename, with or without .php.
+	 * @param string $content  PHP source.
+	 * @return array{filename: string, status: string}|WP_Error
+	 */
+	public function update( $filename, $content ) {
+		$filename = $this->normalize_php_name( $filename );
+		if ( is_wp_error( $filename ) ) {
+			return $filename;
+		}
+		if ( $this->is_enabled( $filename ) ) {
+			return new WP_Error( 'mc_functionality_invalid_status', 'Disable the snippet before updating it.' );
+		}
+		$disabled = $this->dir . '/' . $filename . '.disabled';
+		if ( ! is_file( $disabled ) || ! $this->is_inside( $disabled ) ) {
+			return new WP_Error( 'mc_functionality_invalid_filename', 'Snippet file was not found.' );
+		}
+		$content = $this->prepare_source( $content );
+		if ( is_wp_error( $content ) ) {
+			return $content;
+		}
+		if ( false === file_put_contents( $disabled, $content ) ) {
+			return new WP_Error( 'mc_functionality_snippet_data_unavailable', 'Unable to write the snippet file.' );
+		}
+		return array(
+			'filename' => $filename,
+			'status'   => 'disabled',
+		);
+	}
+
+	/**
+	 * Remove one snippet file and its error note.
+	 *
+	 * @since 1.2.0
+	 * @param string $filename Basename, with or without .php.
+	 * @return array{filename: string, status: string}|WP_Error
+	 */
+	public function delete( $filename ) {
+		$filename = $this->normalize_php_name( $filename );
+		if ( is_wp_error( $filename ) ) {
+			return $filename;
+		}
+		$paths   = array(
+			$this->dir . '/' . $filename,
+			$this->dir . '/' . $filename . '.disabled',
+			$this->dir . '/' . $filename . '.error',
+		);
+		$removed = false;
+		foreach ( $paths as $path ) {
+			if ( ! is_file( $path ) ) {
+				continue;
+			}
+			if ( ! $this->is_inside( $path ) ) {
+				return new WP_Error( 'mc_functionality_invalid_filename', 'Filename must be a single snippet file name.' );
+			}
+			if ( ! unlink( $path ) ) {
+				return new WP_Error( 'mc_functionality_snippet_data_unavailable', 'Unable to delete the snippet file.' );
+			}
+			$removed = true;
+		}
+		if ( ! $removed ) {
+			return new WP_Error( 'mc_functionality_invalid_filename', 'Snippet file was not found.' );
+		}
+		return array(
+			'filename' => $filename,
+			'status'   => 'deleted',
+		);
+	}
+
+	/**
+	 * Basename ending in .php, or an error when the name can leave the directory.
+	 *
+	 * @since 1.2.0
+	 * @param string $filename Requested file name.
+	 * @return string|WP_Error
+	 */
+	private function normalize_php_name( $filename ) {
+		if ( ! is_string( $filename ) || '' === trim( $filename ) ) {
+			return new WP_Error( 'mc_functionality_missing_filename', 'A filename is required.' );
+		}
+		$filename = str_replace( '\\', '/', $filename );
+		if ( basename( $filename ) !== $filename ) {
+			return new WP_Error( 'mc_functionality_invalid_filename', 'Filename must be a single snippet file name.' );
+		}
+		if ( '.disabled' === substr( $filename, -9 ) ) {
+			$filename = substr( $filename, 0, -9 );
+		}
+		if ( '.php' !== substr( $filename, -4 ) ) {
+			$filename .= '.php';
+		}
+		if ( ! $this->is_safe_filename( $filename ) ) {
+			return new WP_Error( 'mc_functionality_invalid_filename', 'Filename must be a single snippet file name.' );
+		}
+		return $filename;
+	}
+
+	/**
+	 * Absolute path of the enabled or disabled file.
+	 *
+	 * @since 1.2.0
+	 * @param string $filename Basename ending in .php.
+	 * @return string|WP_Error
+	 */
+	private function existing_path( $filename ) {
+		$enabled  = $this->dir . '/' . $filename;
+		$disabled = $enabled . '.disabled';
+		if ( is_file( $disabled ) && $this->is_inside( $disabled ) ) {
+			return $disabled;
+		}
+		if ( is_file( $enabled ) && $this->is_inside( $enabled ) ) {
+			return $enabled;
+		}
+		return new WP_Error( 'mc_functionality_invalid_filename', 'Snippet file was not found.' );
+	}
+
+	/**
+	 * Guard, lint, and size-check source before it is written.
+	 *
+	 * @since 1.2.0
+	 * @param string $content PHP source.
+	 * @return string|WP_Error
+	 */
+	private function prepare_source( $content ) {
+		if ( ! is_string( $content ) ) {
+			return new WP_Error( 'mc_functionality_missing_content', 'Snippet content is required.' );
+		}
+		if ( strlen( $content ) > self::MAX_SOURCE_BYTES ) {
+			return new WP_Error( 'mc_functionality_invalid_content', 'Snippet content must be 256 KB or smaller.' );
+		}
+		require_once __DIR__ . '/class-mc-functionality-snippet-meta.php';
+		require_once __DIR__ . '/class-mc-functionality-php-lint.php';
+		$content = Mc_Functionality_Snippet_Meta::ensure_guard( $content );
+		$lint    = Mc_Functionality_Php_Lint::check( $content );
+		if ( is_wp_error( $lint ) ) {
+			return $lint;
+		}
+		return $content;
+	}
+
+	/**
 	 * CSS and JS files that are not disabled.
 	 *
 	 * @return string[]
