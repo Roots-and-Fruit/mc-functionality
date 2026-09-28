@@ -16,7 +16,7 @@
  * Plugin Name:       MC Functionality
  * Plugin URI:        https://www.mattcromwell.com/mc-functionality
  * Description:       A file-based code snippet system for WordPress. Load and execute PHP files from the /code-snippets/ directory with better performance and security than database-stored snippets.
- * Version:           1.2.1
+ * Version:           1.2.2
  * Author:            Matt Cromwell
  * Author URI:        https://www.mattcromwell.com/
  * License:           GPL-2.0+
@@ -35,7 +35,7 @@ if ( ! defined( 'WPINC' ) ) {
  * Start at version 1.0.0 and use SemVer - https://semver.org
  * Rename this for your plugin and update it as you release new versions.
  */
-define( 'MC_FUNCTIONALITY_VERSION', '1.2.1' );
+define( 'MC_FUNCTIONALITY_VERSION', '1.2.2' );
 
 /**
  * Whether $path is inside open_basedir. An empty restriction allows every path.

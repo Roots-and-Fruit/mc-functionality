@@ -830,6 +830,15 @@ class Mc_Functionality_Admin {
 			$new_status = 'disabled';
 			$message = 'Snippet disabled successfully!';
 		} else {
+			$read = $snippet_loader->store()->read( $filename );
+			if ( is_wp_error( $read ) ) {
+				wp_send_json_error( 'File not found or access denied' );
+			}
+			require_once plugin_dir_path( dirname( __FILE__ ) ) . 'includes/class-mc-functionality-php-lint.php';
+			$lint = Mc_Functionality_Php_Lint::check( $read['content'] );
+			if ( is_wp_error( $lint ) ) {
+				wp_send_json_error( $lint->get_error_message() );
+			}
 			$result = $snippet_loader->enable_snippet( $filename );
 			$new_status = 'enabled';
 			$message = 'Snippet enabled successfully!';
